@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Python version of the 2D grid generation program with NumPy vectorization
-This program generates 2D curvilinear grids using hyperbolic method
+This program generates 2D curvilinear grids using elliptic method
 """
 
 import argparse
@@ -10,7 +10,6 @@ from pathlib import Path
 import time
 import sys
 import json
-import numpy as np
 
 project_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(project_root))
@@ -47,38 +46,14 @@ def main(args_: list[str] | None = None) -> None:
             cfgs = remove_comment_keys(cfgs)
     except Exception as e:
         print(f"read config json file error: {e}")
-    
-    if (cfgs['execute_C_code'] == 1):
-        import ctypes
-        lib_path = str(project_root / "src_c" / "libgrid.so")
-        lib = ctypes.CDLL(lib_path)
-        lib.hyper_gene_c.argtypes = [
-            np.ctypeslib.ndpointer(dtype=np.float32),  # x2d
-            np.ctypeslib.ndpointer(dtype=np.float32),  # z2d
-            np.ctypeslib.ndpointer(dtype=np.float32),  # step
-            ctypes.c_int,  # nx
-            ctypes.c_int,  # nz
-            ctypes.c_float, # coef
-            ctypes.c_int,    # t2b
-            ctypes.c_int    # flag_stretch
-            ]
-        lib.hyper_gene_c.restype = ctypes.c_int
-
-    
     if (args.verbose > 0):
         cfgs_print(cfgs)
-
+'''
     t_start = time.time()
     # Generate grid
     gdcurv = grid_init_set(cfgs)
     
-    if (cfgs['execute_C_code'] == 1):
-        status = lib.hyper_gene_c(gdcurv.x2d, gdcurv.z2d, gdcurv.step, 
-                                 gdcurv.nx, gdcurv.nz, cfgs['coef'], 
-                                 cfgs['t2b'], cfgs['flag_stretch'])
-
-    else:
-        hyper_gene(gdcurv, cfgs)
+    hyper_gene(gdcurv, cfgs)
 
     t_end = time.time()
     
@@ -99,7 +74,7 @@ def main(args_: list[str] | None = None) -> None:
         print("***** grid quality check and export quality data *****")
         print("******************************************************")
         grid_quality_check(gdcurv, cfgs)
-
+'''
 
 if __name__ == "__main__":
     main()

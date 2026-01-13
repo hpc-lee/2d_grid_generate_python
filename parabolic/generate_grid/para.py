@@ -10,6 +10,7 @@ from pathlib import Path
 import time
 import sys
 import json
+import numpy as np
 
 project_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(project_root))
@@ -19,6 +20,7 @@ from grid_generation import para_gene
 from common.io_operetions import coord_export
 from common.grid_quality import grid_quality_check
 from common.grid_quality import cal_min_dist
+from common.utils import remove_comment_keys
 
 
 def _parse_args(args: list[str] | None) -> Namespace:
@@ -42,17 +44,38 @@ def main(args_: list[str] | None = None) -> None:
     try:
         with open(args.config_file, 'r') as f:
             cfgs = json.load(f)
+            cfgs = remove_comment_keys(cfgs)
     except Exception as e:
         print(f"read config json file error: {e}")
     
     if (args.verbose > 0):
         cfgs_print(cfgs)
+
+    if (cfgs['execute_C_code'] == 1):
+        import ctypes
+        lib_path = str(project_root / "src_c" / "libgrid.so")
+        lib = ctypes.CDLL(lib_path)
+        lib.para_gene_c.argtypes = [
+            np.ctypeslib.ndpointer(dtype=np.float32),  # x2d
+            np.ctypeslib.ndpointer(dtype=np.float32),  # z2d
+            np.ctypeslib.ndpointer(dtype=np.float32),  # step
+            ctypes.c_int,  # nx
+            ctypes.c_int,  # nz
+            ctypes.c_float, # coef
+            ctypes.c_int    # t2b
+            ]
+        lib.para_gene_c.restype = ctypes.c_int
     
     t_start = time.time()
     # Generate grid
     gdcurv = grid_init_set(cfgs)
     
-    para_gene(gdcurv, cfgs)
+    if (cfgs['execute_C_code'] == 1):
+        status = lib.para_gene_c(gdcurv.x2d, gdcurv.z2d, gdcurv.step, 
+                                 gdcurv.nx, gdcurv.nz, cfgs['coef'], cfgs['t2b'])
+
+    else:
+        para_gene(gdcurv, cfgs)
 
     t_end = time.time()
     

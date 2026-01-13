@@ -23,8 +23,8 @@ def extend_abs_layer(bdry: np.ndarray, dh: float,
 
 def arc_strech(A: float, bdry: np.ndarray) -> np.ndarray:
     npoints = bdry.shape[0]
-    x_0 = bdry[:, 0]
-    z_0 = bdry[:, 1]
+    x_0 = bdry[:, 0].copy()
+    z_0 = bdry[:, 1].copy()
 
     s = np.zeros(npoints)
     for i in range(1, npoints):

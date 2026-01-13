@@ -12,6 +12,8 @@ cat << ieof > ${CONFIGS}
     "number_of_grid_points_x" : 841,
     "number_of_grid_points_z" : 601,
 
+    "execute_C_code" : 0,
+
     "grid_check" : 1,
     "check_orth" : 1,
     "check_jac" : 1,
@@ -25,7 +27,7 @@ cat << ieof > ${CONFIGS}
     "step_input_file" : "${INPUTDIR}/step_file_2d.txt",
     "grid_export_dir" : "${OUTPUTDIR}",
 
-    "flag_stretch" : 1,
+    "flag_stretch" : 0,
     "coef" : 70,
     "t2b" : 1
 }
