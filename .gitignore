@@ -1,0 +1,9 @@
+*.log
+*.png
+*.so
+*.txt
+__pycache__/
+output/
+*.pyc
+*.pyd
+
