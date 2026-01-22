@@ -12,7 +12,7 @@ cat << ieof > ${CONFIGS}
     "number_of_grid_points_x" : 841,
     "number_of_grid_points_z" : 601,
 
-    "execute_C_code" : 0,
+    "execute_C_code" : 1,
 
     "grid_check" : 1,
     "check_orth" : 1,

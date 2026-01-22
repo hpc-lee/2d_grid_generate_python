@@ -10,8 +10,8 @@
 #include "lib_math.h"
 
 
-int 
-hyper_gene(float *x2d, float *z2d, float *step, int nx, int nz, float coef, int t2b, int flag_stretch)
+void 
+hyper_gene_c(float *x2d, float *z2d, float *step, int nx, int nz, float coef, int t2b, int flag_stretch)
 {
   int n = nx-2;  // not include bdry 2 points
 
@@ -68,7 +68,7 @@ hyper_gene(float *x2d, float *z2d, float *step, int nx, int nz, float coef, int 
   free(D);
   free(y);
 
-  return 0;
+  return;
 }
 
 int

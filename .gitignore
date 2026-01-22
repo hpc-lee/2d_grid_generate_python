@@ -1,5 +1,7 @@
 *.log
 *.png
+*.jpg
+*.svg
 *.so
 *.txt
 __pycache__/

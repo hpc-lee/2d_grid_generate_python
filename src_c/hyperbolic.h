@@ -5,9 +5,9 @@
  * function prototype
  *************************************************/
 
-int 
-hyper_gene(float *x2d, float *z2d, float *step, int nx, 
-           int nz, float coef, int t2b, int flag_stretch);
+void 
+hyper_gene_c(float *x2d, float *z2d, float *step, int nx, 
+             int nz, float coef, int t2b, int flag_stretch);
 
 int
 cal_smooth_coef(float coef, float *x2d, float *z2d,

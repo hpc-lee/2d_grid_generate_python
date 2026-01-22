@@ -8,8 +8,8 @@
 #include "lib_mem.h"
 #include "utils.h"
 
-int 
-para_gene(float *x2d, float *z2d, float *step, int nx, int nz, float coef, int t2b)
+void 
+para_gene_c(float *x2d, float *z2d, float *step, int nx, int nz, float coef, int t2b)
 {
   if(t2b == 1)
   {
@@ -53,7 +53,7 @@ para_gene(float *x2d, float *z2d, float *step, int nx, int nz, float coef, int t
   free(x_pre);
   free(z_pre);
 
-  return 0;
+  return;
 }
 
 int 

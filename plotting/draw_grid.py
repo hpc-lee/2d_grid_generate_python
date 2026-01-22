@@ -6,12 +6,13 @@ from draw_grid_func import locate_coord, gather_coord
 
 # -------------------------- parameters input -------------------------- %
 # file and path name
-cfs_file = '../hyperbolic/output/config.json'
+cfs_file = '../elliptic/output/config.json'
+#cfs_file = '../hyperbolic/output/config.json'
 #cfs_file = '../parabolic/output/config.json'
 # which grid profile to plot - NOW 0-BASED
 subs = [0, 0]  # Start from index 0 in both x and z dimensions
 subc = [-1, -1]   # '-1' to plot all points in this dimension (0-based interpretation)
-subt = [4, 4]
+subt = [1, 1]
 
 # figure control parameters
 flag_km = 1
@@ -69,4 +70,5 @@ plt.tight_layout()
 plt.show()
 
 if flag_print:
-    plt.savefig('grid.png', dpi=300, bbox_inches='tight', facecolor='white')
+    #plt.savefig('grid.png', dpi=300, bbox_inches='tight', facecolor='white')
+    plt.savefig('grid.svg', format='svg', dpi=600, bbox_inches='tight', facecolor='white')

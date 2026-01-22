@@ -12,7 +12,13 @@ class GridData:
         # File Output in MPI Parallel Simulations
         self.fname_part = "px0_pz0" 
         # global_index_of_first_physical_points
-        self.g_start = np.array([0, 0], dtype=np.int32)
+        self.gni1 = 0
+        self.gnk1 = 0
+        # ni and nk are variables only required for MPI parallelization
+        # with ghost points, which are unnecessary here; however, 
+        # they are assigned for unifying data export across different methods.
+        self.ni = nx
+        self.nk = nz
         
         self.x2d = np.zeros((nz, nx), dtype=np.float32)
         self.z2d = np.zeros((nz, nx), dtype=np.float32)

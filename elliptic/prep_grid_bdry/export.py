@@ -14,5 +14,5 @@ def export_bdry(bx1: np.ndarray, bx2: np.ndarray,
         for i in range(nx):
             fd.write(f'{bz1[i, 0]:.9e} {bz1[i, 1]:.9e}\n')
         fd.write(f"# bz2 coords, nx is {nx}\n") 
-        for i in range(nz):
+        for i in range(nx):
             fd.write(f'{bz2[i, 0]:.9e} {bz2[i, 1]:.9e}\n')

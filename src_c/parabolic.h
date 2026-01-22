@@ -5,8 +5,8 @@
  * function prototype
  *************************************************/
 
-int 
-para_gene(float *x2d, float *z2d, float *step, int nx, int nz, float coef, int t2b);
+void 
+para_gene_c(float *x2d, float *z2d, float *step, int nx, int nz, float coef, int t2b);
 
 int 
 predict_point(float *x2d, float *z2d, int nx, int nz, int k, int t2b, 

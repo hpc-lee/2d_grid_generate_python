@@ -26,8 +26,8 @@ from export import export_bdry
 
 flag_printf = 1
 flag_topo_z = 1
-flag_extend_abs = 1
-flag_arc_strech = 1
+flag_extend_abs = 0
+flag_arc_strech = 0
 file_dir = "./data_file_2d.txt"
 
 if flag_arc_strech:
@@ -63,7 +63,7 @@ if flag_topo_z:
     x0 = 10.0 * 1e3
     x1 = 30.0 * 1e3
     a = 3.0 * 1e3
-    H = 6.0 * 1e3
+    H = 3.0 * 1e3
     
     for i in range(nx1):
         idx = i + num_pml

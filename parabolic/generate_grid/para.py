@@ -64,15 +64,15 @@ def main(args_: list[str] | None = None) -> None:
             ctypes.c_float, # coef
             ctypes.c_int    # t2b
             ]
-        lib.para_gene_c.restype = ctypes.c_int
+        lib.para_gene_c.restype = None
     
     t_start = time.time()
     # Generate grid
     gdcurv = grid_init_set(cfgs)
     
     if (cfgs['execute_C_code'] == 1):
-        status = lib.para_gene_c(gdcurv.x2d, gdcurv.z2d, gdcurv.step, 
-                                 gdcurv.nx, gdcurv.nz, cfgs['coef'], cfgs['t2b'])
+        lib.para_gene_c(gdcurv.x2d, gdcurv.z2d, gdcurv.step, 
+                        gdcurv.nx, gdcurv.nz, cfgs['coef'], cfgs['t2b'])
 
     else:
         para_gene(gdcurv, cfgs)

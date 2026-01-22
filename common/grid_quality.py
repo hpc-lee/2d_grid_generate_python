@@ -8,58 +8,58 @@ def grid_quality_check(gdcurv: 'GridData', cfgs: dict) -> None:
     """Perform grid quality checks"""
     x2d = gdcurv.x2d
     z2d = gdcurv.z2d
-    nx = gdcurv.nx
-    nz = gdcurv.nz
+    ni = gdcurv.ni
+    nk = gdcurv.nk
 
-    var = np.zeros((nz, nx), dtype=np.float32)
+    var = np.zeros((nk, ni), dtype=np.float32)
     grid_export_dir = cfgs['grid_export_dir']
     if cfgs['check_orth'] == 1:
         quality_name = "orth"
-        cal_orth(var, x2d, z2d, nx, nz)
+        cal_orth(var, x2d, z2d, ni, nk)
         quality_export(gdcurv, var, grid_export_dir, quality_name)
     
     if cfgs['check_jac'] == 1:
         quality_name = "jacobi"
-        cal_jacobi(var, x2d, z2d, nx, nz)
+        cal_jacobi(var, x2d, z2d, ni, nk)
         quality_export(gdcurv, var, grid_export_dir, quality_name)
     
     if cfgs['check_ratio'] == 1:
         quality_name = "ratio"
-        cal_ratio(var, x2d, z2d, nx, nz)
+        cal_ratio(var, x2d, z2d, ni, nk)
         quality_export(gdcurv, var, grid_export_dir, quality_name)
     
     if cfgs['check_step_xi'] == 1:
         quality_name = "step_xi"
-        cal_step_x(var, x2d, z2d, nx)
+        cal_step_x(var, x2d, z2d, ni)
         quality_export(gdcurv, var, grid_export_dir, quality_name)
     
     if cfgs['check_step_zt'] == 1:
         quality_name = "step_zt"
-        cal_step_z(var, x2d, z2d, nz)
+        cal_step_z(var, x2d, z2d, nk)
         quality_export(gdcurv, var, grid_export_dir, quality_name)
     
     if cfgs['check_smooth_xi'] == 1:
         quality_name = "smooth_xi"
-        cal_smooth_x(var, x2d, z2d, nx)
+        cal_smooth_x(var, x2d, z2d, ni)
         quality_export(gdcurv, var, grid_export_dir, quality_name)
     
     if cfgs['check_smooth_zt'] == 1:
         quality_name = "smooth_zt"
-        cal_smooth_z(var, x2d, z2d, nz)
+        cal_smooth_z(var, x2d, z2d, nk)
         quality_export(gdcurv, var, grid_export_dir, quality_name)
 
 
 def cal_orth(var: np.ndarray, x2d: np.ndarray, z2d: np.ndarray,
-             nx: int, nz: int) -> None:
+             ni: int, nk: int) -> None:
     
     trans = 180 / np.pi  # arc to angle
     
     # Calculate derivatives using vectorized operations
-    x_xi = x2d[:, 1:nx] - x2d[:, 0:nx-1]  # dx/dxi
-    z_xi = z2d[:, 1:nx] - z2d[:, 0:nx-1]  # dz/dxi
+    x_xi = x2d[:, 1:ni] - x2d[:, 0:ni-1]  # dx/dxi
+    z_xi = z2d[:, 1:ni] - z2d[:, 0:ni-1]  # dz/dxi
     
-    x_zt = x2d[1:nz, :] - x2d[0:nz-1, :]  # dx/dzt
-    z_zt = z2d[1:nz, :] - z2d[0:nz-1, :]  # dz/dzt
+    x_zt = x2d[1:nk, :] - x2d[0:nk-1, :]  # dx/dzt
+    z_zt = z2d[1:nk, :] - z2d[0:nk-1, :]  # dz/dzt
     
     # Calculate dot product and lengths
     dot = (x_xi[:-1, :] * x_zt[:, :-1]) + (z_xi[:-1, :] * z_zt[:, :-1])
@@ -71,40 +71,40 @@ def cal_orth(var: np.ndarray, x2d: np.ndarray, z2d: np.ndarray,
     # Clip cosine to valid range for acos
     cos_angle = np.clip(cos_angle, -1, 1)
     angle = np.arccos(cos_angle) * trans
-    var[:nz-1, :nx-1] = 90 - np.abs(angle - 90)
+    var[:nk-1, :ni-1] = 90 - np.abs(angle - 90)
     
     # Handle boundaries
-    var[:, nx-1] = var[:, nx-2]  # i = nx-1
-    var[nz-1, :] = var[nz-2, :]  # k = nz-1
+    var[:, ni-1] = var[:, ni-2]  # i = ni-1
+    var[nk-1, :] = var[nk-2, :]  # k = nk-1
 
 
 def cal_jacobi(var: np.ndarray, x2d: np.ndarray, z2d: np.ndarray,
-               nx: int, nz: int):
+               ni: int, nk: int):
     
     # Calculate derivatives using vectorized operations
-    x_xi = x2d[:, 1:nx] - x2d[:, 0:nx-1]  # dx/dxi
-    z_xi = z2d[:, 1:nx] - z2d[:, 0:nx-1]  # dz/dxi
+    x_xi = x2d[:, 1:ni] - x2d[:, 0:ni-1]  # dx/dxi
+    z_xi = z2d[:, 1:ni] - z2d[:, 0:ni-1]  # dz/dxi
     
-    x_zt = x2d[1:nz, :] - x2d[0:nz-1, :]  # dx/dzt
-    z_zt = z2d[1:nz, :] - z2d[0:nz-1, :]  # dz/dzt
+    x_zt = x2d[1:nk, :] - x2d[0:nk-1, :]  # dx/dzt
+    z_zt = z2d[1:nk, :] - z2d[0:nk-1, :]  # dz/dzt
     
     # Calculate Jacobian
     jacobian = (x_xi[:-1, :] * z_zt[:, :-1]) - (z_xi[:-1, :] * x_zt[:, :-1])
     var[:-1, :-1] = jacobian
     
     # Handle boundaries
-    var[:, nx-1] = var[:, nx-2]  # i = nx-1
-    var[nz-1, :] = var[nz-2, :]  # k = nz-1
+    var[:, ni-1] = var[:, ni-2]  # i = ni-1
+    var[nk-1, :] = var[nk-2, :]  # k = nk-1
 
 
 def cal_ratio(var: np.ndarray, x2d: np.ndarray, z2d: np.ndarray,
-              nx: int, nz: int):
+              ni: int, nk: int):
     # Calculate derivatives using vectorized operations
-    x_xi = x2d[:, 1:nx] - x2d[:, 0:nx-1]  # dx/dxi
-    z_xi = z2d[:, 1:nx] - z2d[:, 0:nx-1]  # dz/dxi
+    x_xi = x2d[:, 1:ni] - x2d[:, 0:ni-1]  # dx/dxi
+    z_xi = z2d[:, 1:ni] - z2d[:, 0:ni-1]  # dz/dxi
     
-    x_zt = x2d[1:nz, :] - x2d[0:nz-1, :]  # dx/dzt
-    z_zt = z2d[1:nz, :] - z2d[0:nz-1, :]  # dz/dzt
+    x_zt = x2d[1:nk, :] - x2d[0:nk-1, :]  # dx/dzt
+    z_zt = z2d[1:nk, :] - z2d[0:nk-1, :]  # dz/dzt
     
     # Calculate lengths
     len_xi = np.sqrt(x_xi[:-1, :]**2 + z_xi[:-1, :]**2)
@@ -114,47 +114,47 @@ def cal_ratio(var: np.ndarray, x2d: np.ndarray, z2d: np.ndarray,
     r1 = np.divide(len_xi, len_zt, out=np.zeros_like(len_xi), where=len_zt != 0)
     r2 = np.divide(len_zt, len_xi, out=np.zeros_like(len_zt), where=len_xi != 0)
     
-    var[:nz-1, :nx-1] = np.maximum(r1, r2)
+    var[:nk-1, :ni-1] = np.maximum(r1, r2)
     
     # Handle boundaries
-    var[:, nx-1] = var[:, nx-2]  # i = nx-1
-    var[nz-1, :] = var[nz-2, :]  # k = nz-1
+    var[:, ni-1] = var[:, ni-2]  # i = ni-1
+    var[nk-1, :] = var[nk-2, :]  # k = nk-1
 
 
 def cal_step_x(var: np.ndarray, x2d: np.ndarray, z2d: np.ndarray,
-               nx: int):
+               ni: int):
     # Calculate step length in x direction
-    x_xi = x2d[:, 1:nx] - x2d[:, 0:nx-1]
-    z_xi = z2d[:, 1:nx] - z2d[:, 0:nx-1]
+    x_xi = x2d[:, 1:ni] - x2d[:, 0:ni-1]
+    z_xi = z2d[:, 1:ni] - z2d[:, 0:ni-1]
     
     step_lengths = np.sqrt(x_xi**2 + z_xi**2)
-    var[:, :nx-1] = step_lengths
+    var[:, :ni-1] = step_lengths
     
     # Handle boundary
-    var[:, nx-1] = var[:, nx-2]  # i = nx-1
+    var[:, ni-1] = var[:, ni-2]  # i = ni-1
 
 
 def cal_step_z(var: np.ndarray, x2d: np.ndarray, z2d: np.ndarray,
-               nz: int):
+               nk: int):
     # Calculate step length in z direction
-    x_zt = x2d[1:nz, :] - x2d[0:nz-1, :]
-    z_zt = z2d[1:nz, :] - z2d[0:nz-1, :]
+    x_zt = x2d[1:nk, :] - x2d[0:nk-1, :]
+    z_zt = z2d[1:nk, :] - z2d[0:nk-1, :]
     
     step_lengths = np.sqrt(x_zt**2 + z_zt**2)
-    var[:nz-1, :] = step_lengths
+    var[:nk-1, :] = step_lengths
     
     # Handle boundary
-    var[nz-1, :] = var[nz-2, :]  # k = nz-1
+    var[nk-1, :] = var[nk-2, :]  # k = nk-1
 
 
 def cal_smooth_x(var: np.ndarray, x2d: np.ndarray, z2d: np.ndarray,
-                 nx: int):
+                 ni: int):
     # Calculate differences in x direction
-    x_xi1 = x2d[:, 1:nx-1] - x2d[:, 0:nx-2]  # dx/dxi from left
-    z_xi1 = z2d[:, 1:nx-1] - z2d[:, 0:nx-2]  # dz/dxi from left
+    x_xi1 = x2d[:, 1:ni-1] - x2d[:, 0:ni-2]  # dx/dxi from left
+    z_xi1 = z2d[:, 1:ni-1] - z2d[:, 0:ni-2]  # dz/dxi from left
     
-    x_xi2 = x2d[:, 2:nx] - x2d[:, 1:nx-1]    # dx/dxi from right
-    z_xi2 = z2d[:, 2:nx] - z2d[:, 1:nx-1]    # dz/dxi from right
+    x_xi2 = x2d[:, 2:ni] - x2d[:, 1:ni-1]    # dx/dxi from right
+    z_xi2 = z2d[:, 2:ni] - z2d[:, 1:ni-1]    # dz/dxi from right
     
     # Calculate lengths
     len_xi1 = np.sqrt(x_xi1**2 + z_xi1**2)
@@ -164,21 +164,21 @@ def cal_smooth_x(var: np.ndarray, x2d: np.ndarray, z2d: np.ndarray,
     r1 = np.divide(len_xi1, len_xi2, out=np.zeros_like(len_xi1), where=len_xi2 != 0)
     r2 = np.divide(len_xi2, len_xi1, out=np.zeros_like(len_xi2), where=len_xi1 != 0)
     
-    var[:, 1:nx-1] = np.maximum(r1, r2)
+    var[:, 1:ni-1] = np.maximum(r1, r2)
     
     # Handle boundaries
     var[:, 0] = var[:, 1]    # i = 0
-    var[:, nx-1] = var[:, nx-2]  # i = nx-1
+    var[:, ni-1] = var[:, ni-2]  # i = ni-1
 
 
 def cal_smooth_z(var: np.ndarray, x2d: np.ndarray, z2d: np.ndarray,
-                 nz: int):
+                 nk: int):
     # Calculate differences in z direction
-    x_zt1 = x2d[1:nz-1, :] - x2d[0:nz-2, :]  # dx/dzt from below
-    z_zt1 = z2d[1:nz-1, :] - z2d[0:nz-2, :]  # dz/dzt from below
+    x_zt1 = x2d[1:nk-1, :] - x2d[0:nk-2, :]  # dx/dzt from below
+    z_zt1 = z2d[1:nk-1, :] - z2d[0:nk-2, :]  # dz/dzt from below
     
-    x_zt2 = x2d[2:nz, :] - x2d[1:nz-1, :]    # dx/dzt from above
-    z_zt2 = z2d[2:nz, :] - z2d[1:nz-1, :]    # dz/dzt from above
+    x_zt2 = x2d[2:nk, :] - x2d[1:nk-1, :]    # dx/dzt from above
+    z_zt2 = z2d[2:nk, :] - z2d[1:nk-1, :]    # dz/dzt from above
     
     # Calculate lengths
     len_zt1 = np.sqrt(x_zt1**2 + z_zt1**2)
@@ -188,11 +188,11 @@ def cal_smooth_z(var: np.ndarray, x2d: np.ndarray, z2d: np.ndarray,
     r1 = np.divide(len_zt1, len_zt2, out=np.zeros_like(len_zt1), where=len_zt2 != 0)
     r2 = np.divide(len_zt2, len_zt1, out=np.zeros_like(len_zt2), where=len_zt1 != 0)
     
-    var[1:nz-1, :] = np.maximum(r1, r2)
+    var[1:nk-1, :] = np.maximum(r1, r2)
     
     # Handle boundaries
     var[0, :] = var[1, :]      # k = 0
-    var[nz-1, :] = var[nz-2, :]  # k = nz-1
+    var[nk-1, :] = var[nk-2, :]  # k = nk-1
 
 @numba.jit(nopython=True, nogil=True, cache=True)
 def dist_point2line_vectorized(x0: np.ndarray, z0: np.ndarray,
@@ -225,13 +225,13 @@ def cal_min_dist(gdcurv: 'GridData') -> Tuple[int, int, float]:
     """
     x2d = gdcurv.x2d
     z2d = gdcurv.z2d
-    nx = gdcurv.nx
-    nz = gdcurv.nz
-    k_indices = slice(1, nz-1)
-    i_indices = slice(1, nx-1)
+    ni = gdcurv.ni
+    nk = gdcurv.nk
+    k_indices = slice(1, nk-1)
+    i_indices = slice(1, ni-1)
     
     #  Current point coordinates
-    x0 = x2d[k_indices, i_indices]  # (nz-2, nx-2)
+    x0 = x2d[k_indices, i_indices]  # (nk-2, ni-2)
     z0 = z2d[k_indices, i_indices]
     
     #  Adjacent point coordinates
@@ -258,7 +258,7 @@ def cal_min_dist(gdcurv: 'GridData') -> Tuple[int, int, float]:
     matrices = [d1, d2, d3, d4]
     target_mat = matrices[mat_idx]
     indx_k, indx_i = np.unravel_index(np.argmin(target_mat), target_mat.shape)
-    # NOTE: need add 1,  target_mat.shape = (nz-2, nx-2)
+    # NOTE: need add 1,  target_mat.shape = (nk-2, ni-2)
     indx_i += 1
     indx_k += 1
     

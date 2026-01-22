@@ -1,31 +1,28 @@
 #ifndef LIB_MATH_H
 #define LIB_MATH_H
 
-int
-mat_invert2x2(float matrix[][2]);
+#include <stdint.h>
 
-int
-mat_mul2x2(float A[][2], float B[][2], float C[][2]);
+typedef float mat2x2_t[2][2];
 
-int
-mat_mul2x1(float A[][2], float *B, float *C);
+typedef float vec2_t[2];
 
-int
-mat_add2x2(float A[][2], float B[][2], float C[][2]);
+int mat_invert2x2(mat2x2_t matrix);
 
-int
-vec_add2x1(float *A, float *B, float *C);
+int mat_mul2x2(const mat2x2_t A, const mat2x2_t B, mat2x2_t C);
 
-int
-vec_sub2x1(float *A, float *B, float *C);
+int mat_mul2x1(const mat2x2_t A, const vec2_t B, vec2_t C);
 
-int
-mat_sub2x2(float A[][2], float B[][2], float C[][2]);
+int mat_add2x2(const mat2x2_t A, const mat2x2_t B, mat2x2_t C);
 
-int
-mat_copy2x2(float A[][2], float B[][2]);
+int vec_add2x1(const vec2_t A, const vec2_t B, vec2_t C);
 
-int
-mat_iden2x2(float A[][2]);
+int vec_sub2x1(const vec2_t A, const vec2_t B, vec2_t C);
 
-#endif
+int mat_sub2x2(const mat2x2_t A, const mat2x2_t B, mat2x2_t C);
+
+void mat_copy2x2(const mat2x2_t A, mat2x2_t B);
+
+void mat_iden2x2(mat2x2_t A);
+
+#endif 

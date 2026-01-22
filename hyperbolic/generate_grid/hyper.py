@@ -62,7 +62,7 @@ def main(args_: list[str] | None = None) -> None:
             ctypes.c_int,    # t2b
             ctypes.c_int    # flag_stretch
             ]
-        lib.hyper_gene_c.restype = ctypes.c_int
+        lib.hyper_gene_c.restype = None
 
     
     if (args.verbose > 0):
@@ -73,9 +73,9 @@ def main(args_: list[str] | None = None) -> None:
     gdcurv = grid_init_set(cfgs)
     
     if (cfgs['execute_C_code'] == 1):
-        status = lib.hyper_gene_c(gdcurv.x2d, gdcurv.z2d, gdcurv.step, 
-                                 gdcurv.nx, gdcurv.nz, cfgs['coef'], 
-                                 cfgs['t2b'], cfgs['flag_stretch'])
+        lib.hyper_gene_c(gdcurv.x2d, gdcurv.z2d, gdcurv.step, 
+                        gdcurv.nx, gdcurv.nz, cfgs['coef'], 
+                        cfgs['t2b'], cfgs['flag_stretch'])
 
     else:
         hyper_gene(gdcurv, cfgs)

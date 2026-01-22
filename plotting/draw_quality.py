@@ -7,13 +7,14 @@ from draw_grid_func import locate_coord, gather_coord, gather_quality
 
 # -------------------------- parameters input -------------------------- %
 # file and path name
-cfs_file = '../hyperbolic/output/config.json'
+cfs_file = '../elliptic/output/config.json'
+#cfs_file = '../hyperbolic/output/config.json'
 #cfs_file = '../parabolic/output/config.json'
 # varable to plot 
 # 'orth', 'jacobi', 'ratio', 'smooth_xi', 
 # 'smooth_zt', 'step_xi', 'step_zt'
 #varnm = 'jacobi'
-varnm = 'smooth_zt'
+varnm = 'step_zt'
 # which grid profile to plot
 subs = [0, 0]  # Start from index 0 in both x and z dimensions
 subc = [-1, -1]   # '-1' to plot all points in this dimension (0-based interpretation)
@@ -81,3 +82,4 @@ plt.show()
 
 if flag_print:
     plt.savefig('quality.png', dpi=300, bbox_inches='tight', facecolor='white')
+    #plt.savefig('quality.svg', format='svg', dpi=600, bbox_inches='tight', facecolor='white')

@@ -10,9 +10,10 @@ def coord_export(gdcurv: 'GridData', output_dir: str) -> None:
 
     x2d = gdcurv.x2d
     z2d = gdcurv.z2d
-    nx = gdcurv.nx
-    nz = gdcurv.nz
-    g_start = gdcurv.g_start
+    ni = gdcurv.ni
+    nk = gdcurv.nk
+    gni1 = gdcurv.gni1
+    gnk1 = gdcurv.gnk1
     fname_part = gdcurv.fname_part
     
     # Create output filename
@@ -21,16 +22,16 @@ def coord_export(gdcurv: 'GridData', output_dir: str) -> None:
     # Create NetCDF file
     with Dataset(ou_file, 'w', format='NETCDF4') as nc:
         # Define dimensions
-        nc.createDimension('k', nz)
-        nc.createDimension('i', nx)
+        nc.createDimension('k', nk)
+        nc.createDimension('i', ni)
         
         # Create variables
         x_var = nc.createVariable('x', 'f4', ('k', 'i'))
         z_var = nc.createVariable('z', 'f4', ('k', 'i'))
         
         # Add global attributes
-        nc.global_index_of_first_physical_points = g_start
-        nc.count_of_physical_points = [nx, nz]
+        nc.global_index_of_first_physical_points = [gni1, gnk1]
+        nc.count_of_physical_points = [ni, nk]
         
         # Write data
         x_var[:, :] = x2d
@@ -42,9 +43,10 @@ def quality_export(gdcurv: 'GridData', var: np.ndarray,
     """
     Export quality data to NetCDF file
     """
-    nx = gdcurv.nx
-    nz = gdcurv.nz
-    g_start = gdcurv.g_start
+    ni = gdcurv.ni
+    nk = gdcurv.nk
+    gni1 = gdcurv.gni1
+    gnk1 = gdcurv.gnk1
     fname_part = gdcurv.fname_part
     
     # Create output filename
@@ -53,15 +55,15 @@ def quality_export(gdcurv: 'GridData', var: np.ndarray,
     # Create NetCDF file
     with Dataset(ou_file, 'w', format='NETCDF4') as nc:
         # Define dimensions
-        nc.createDimension('k', nz)
-        nc.createDimension('i', nx)
+        nc.createDimension('k', nk)
+        nc.createDimension('i', ni)
         
         # Create variable
         var_out = nc.createVariable(var_name, 'f4', ('k', 'i'))
         
         # Add global attributes
-        nc.global_index_of_first_physical_points = g_start
-        nc.count_of_physical_points = [nx, nz]
+        nc.global_index_of_first_physical_points = [gni1, gnk1]
+        nc.count_of_physical_points = [ni, nk]
         
         # Write data
         var_out[:, :] = var
