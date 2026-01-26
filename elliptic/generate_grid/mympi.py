@@ -13,6 +13,43 @@ class MyMPI:
         self.topoid = np.array([0, 0], dtype=np.int32)      # 2D coordinates: [x, z]
         self.neighid = np.array([0, 0, 0, 0], dtype=np.int32)  # [left, right, down, up]
 
+        self.send_counts = None
+        self.recv_counts = None
+        self.send_displs = None
+        self.recv_displs = None
+        self.send_buffer = None
+        self.recv_buffer = None
+        self.send_types = [MPI.FLOAT] * 4
+        self.recv_types = [MPI.FLOAT] * 4
+
+    def init_buffers(self, nx: int, nz: int) -> None:
+        float_size = np.dtype(np.float32).itemsize
+        
+        self.send_counts = [0, 0, 0, 0]
+        self.recv_counts = [0, 0, 0, 0]
+        for i, neighbor in enumerate(self.neighid):
+            if neighbor != MPI.PROC_NULL:
+                self.send_counts[i] = self.recv_counts[i] = 2 * (nz if i < 2 else nx)
+        
+        self.send_displs = [0, 0, 0, 0]
+        offset = 0
+        for i in range(4):
+            if self.send_counts[i] > 0:
+                self.send_displs[i] = offset * float_size
+                offset += self.send_counts[i]
+        
+        self.recv_displs = [0, 0, 0, 0]
+        offset = 0
+        for i in range(4):
+            if self.recv_counts[i] > 0:
+                self.recv_displs[i] = offset * float_size
+                offset += self.recv_counts[i]
+        
+        total_send = sum(self.send_counts)
+        total_recv = sum(self.recv_counts)
+        self.send_buffer = np.empty(total_send, dtype=np.float32) if total_send > 0 else None
+        self.recv_buffer = np.empty(total_recv, dtype=np.float32) if total_recv > 0 else None
+
 
 def mympi_set(cfgs: dict, myid: int, comm: MPI.Comm) -> MyMPI:
     """
@@ -129,119 +166,64 @@ def grid_coord_exchange(gdcurv: GridData, mpi: MyMPI) -> None:
         x2d[nk1-1, :] = recv_x
         z2d[nk1-1, :] = recv_z
 
-
-def grid_comm_neighbor_adapted(mympi: MyMPI, x2d: np.ndarray, 
-                               z2d: np.ndarray, nx: int, nz: int) -> None:
-    """
-    Cross-node boundary exchange using Neighbor_alltoallw
-    """
-    neighbors = mympi.neighid  
-    
-    topocomm = mympi.topocomm 
-    myid = mympi.myid
-
-    # Step 1: Prepare SEND data
-    float_size = np.dtype(np.float32).itemsize
-    send_counts = [0, 0, 0, 0]  # [left, right, down, up]
-    send_displs = [0, 0, 0, 0]  # Byte offsets
-    send_types = [MPI.FLOAT] * 4
-    
-    # Calculate send counts per neighbor
-    for i, neighbor in enumerate(neighbors):
-        if neighbor == MPI.PROC_NULL:
-            continue
-        if i < 2:  # Left/right: send column data (2*nz floats)
-            send_counts[i] = 2 * nz
-        else:  # Down/up: send row data (2*nx floats)
-            send_counts[i] = 2 * nx
-    
-    # Create contiguous send buffer
-    total_send_elems = sum(send_counts)
-    send_buffer = np.empty(total_send_elems, dtype=np.float32)
-    
-    # Fill send buffer and set displacements
-    current_offset = 0
-    for i, neighbor in enumerate(neighbors):
-        if neighbor == MPI.PROC_NULL:
-            continue
-        
-        # Get data to send
-        if i == 0:  # Left: send column index=1
-            start = current_offset
-            send_buffer[start:start+nz] = x2d[:, 1]
-            send_buffer[start+nz:start+2*nz] = z2d[:, 1]
-        elif i == 1:  # Right: send column index=-2
-            start = current_offset
-            send_buffer[start:start+nz] = x2d[:, -2]
-            send_buffer[start+nz:start+2*nz] = z2d[:, -2]
-        elif i == 2:  # Down: send row index=1
-            start = current_offset
-            send_buffer[start:start+nx] = x2d[1, :]
-            send_buffer[start+nx:start+2*nx] = z2d[1, :]
-        elif i == 3:  # Up: send row index=-2
-            start = current_offset
-            send_buffer[start:start+nx] = x2d[-2, :]
-            send_buffer[start+nx:start+2*nx] = z2d[-2, :]
-        
-        send_displs[i] = current_offset * float_size
-        current_offset += send_counts[i]
-
-    # Step 2: Prepare RECV data
-    recv_counts = [0, 0, 0, 0]
-    recv_displs = [0, 0, 0, 0]
-    recv_types = [MPI.FLOAT] * 4
-    
-    # Calculate receive counts (symmetric to send)
-    for i, neighbor in enumerate(neighbors):
-        if neighbor == MPI.PROC_NULL:
-            continue
-        if i < 2:  # Left/right neighbors send columns to this rank
-            recv_counts[i] = 2 * nz
-        else:  # Down/up neighbors send rows to this rank
-            recv_counts[i] = 2 * nx
-    
-    # Create contiguous receive buffer
-    total_recv_elems = sum(recv_counts)
-    recv_buffer = np.empty(total_recv_elems, dtype=np.float32)
-    
-    # Set receive displacements
-    current_offset = 0
-    for i in range(4):
-        if recv_counts[i] > 0:
-            recv_displs[i] = current_offset * float_size
-            current_offset += recv_counts[i]
-
-    # Step 3: Perform communication
-    try:
-        topocomm.Neighbor_alltoallw(
-            (send_buffer, send_counts, send_displs, send_types),
-            (recv_buffer, recv_counts, recv_displs, recv_types)
-        )
-    except MPI.Exception as e:
-        print(f"Rank {myid}: MPI communication failed - {e}")
-        raise  
-
-    # Step 4: Unpack received data to ghost points
-    current_offset = 0
-    for i, neighbor in enumerate(neighbors):
-        if neighbor == MPI.PROC_NULL:
-            continue
+def grid_comm_optimized(mympi: MyMPI, x2d: np.ndarray, z2d: np.ndarray) -> None:
+    if mympi.send_buffer is not None:
+        offset = 0
+        for i, neighbor in enumerate(mympi.neighid):
+            if neighbor == MPI.PROC_NULL:
+                continue
             
-        count = recv_counts[i]
-        data = recv_buffer[current_offset:current_offset+count]
-        current_offset += count  # 总是递增, 与recv_displs顺序一致
-        
-        if i == 0:  # Left neighbor -> fill left ghost column (index 0)
-            x2d[:, 0] = data[:nz]
-            z2d[:, 0] = data[nz:]
-        elif i == 1:  # Right neighbor -> fill right ghost column (index -1)
-            x2d[:, -1] = data[:nz]
-            z2d[:, -1] = data[nz:]
-        elif i == 2:  # Down neighbor -> fill bottom ghost row (index 0)
-            x2d[0, :] = data[:nx]
-            z2d[0, :] = data[nx:]
-        elif i == 3:  # Up neighbor -> fill top ghost row (index -1)
-            x2d[-1, :] = data[:nx]
-            z2d[-1, :] = data[nx:]
+            count = mympi.send_counts[i]
+            if count == 0:
+                continue
+            
+            if i < 2:  # Left/right
+                nz = x2d.shape[0]
+                col_idx = 1 if i == 0 else -2
+                mympi.send_buffer[offset:offset+nz] = x2d[:, col_idx]
+                mympi.send_buffer[offset+nz:offset+2*nz] = z2d[:, col_idx]
+                offset += 2 * nz
+            else:  # Down/up
+                nx = x2d.shape[1]
+                row_idx = 1 if i == 2 else -2
+                mympi.send_buffer[offset:offset+nx] = x2d[row_idx, :]
+                mympi.send_buffer[offset+nx:offset+2*nx] = z2d[row_idx, :]
+                offset += 2 * nx
+    
+    mympi.topocomm.Neighbor_alltoallw(
+        (mympi.send_buffer, mympi.send_counts, mympi.send_displs, mympi.send_types),
+        (mympi.recv_buffer, mympi.recv_counts, mympi.recv_displs, mympi.recv_types)
+    )
+    
+    if mympi.recv_buffer is not None:
+        offset = 0
+        for i, neighbor in enumerate(mympi.neighid):
+            if neighbor == MPI.PROC_NULL:
+                continue
+            
+            count = mympi.recv_counts[i]
+            if count == 0:
+                continue
+            
+            if i < 2:  # Left/right ghost columns
+                nz = x2d.shape[0]
+                data = mympi.recv_buffer[offset:offset+count]
+                if i == 0:  # Left ghost
+                    x2d[:, 0] = data[:nz]
+                    z2d[:, 0] = data[nz:]
+                else:  # Right ghost
+                    x2d[:, -1] = data[:nz]
+                    z2d[:, -1] = data[nz:]
+                offset += 2 * nz
+            else:  # Down/up ghost rows
+                nx = x2d.shape[1]
+                data = mympi.recv_buffer[offset:offset+count]
+                if i == 2:  # Down ghost
+                    x2d[0, :] = data[:nx]
+                    z2d[0, :] = data[nx:]
+                else:  # Up ghost
+                    x2d[-1, :] = data[:nx]
+                    z2d[-1, :] = data[nx:]
+                offset += 2 * nx
 
     

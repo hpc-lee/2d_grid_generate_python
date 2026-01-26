@@ -6,8 +6,6 @@ CONFIGS=${OUTPUTDIR}/config.json
 
 rm -rf "${OUTPUTDIR}"
 mkdir -p "${OUTPUTDIR}"
-# 新增：创建性能分析日志目录
-mkdir -p "${OUTPUTDIR}/profiles"
 
 #-- total x mpi procs
 NPROCS_X=2
@@ -39,19 +37,27 @@ cat << ieof > ${CONFIGS}
     "grid_export_dir" : "${OUTPUTDIR}",
 
     "#method" : "tfi",
-    "#method" : "dirichlet",
-    "method" : "higenstock",
-    "coef" : [20,20,20,20],
-    "weight" : [0.0,1.0],
-    "iter_err" : 1E-2,
-    "max_iter" : 5E3
+    "#method" : {
+        "dirichlet" : {
+            "coef" : [20,20,20,20],
+            "weight" : [0.0,1.0],
+            "iter_err" : 1E-2,
+            "max_iter" : 5E3
+        }
+    },
+    "method" : {
+        "higenstock" : {
+            "coef" : [20,20,20,20],
+            "weight" : [0.0,1.0],
+            "iter_err" : 1E-2,
+            "max_iter" : 5E3
+        }
+    }
 }
 ieof
 
 mpiexec -np $NUMPROCS python ellip.py \
     --config-file ${CONFIGS} \
     --verbose 10  2>&1 | tee output.log
-
-#mpiexec -np $NUMPROCS bash -c 'python -m cProfile -o "'"${OUTPUTDIR}"'/profiles/profile_rank_${OMPI_COMM_WORLD_RANK}.log" ellip.py --config-file '"${CONFIGS}"' --verbose 10' 2>&1 | tee output.log
 
 # vim:ts=4:sw=4:nu:et:ai:

@@ -60,6 +60,7 @@ def main(args_: list[str] | None = None) -> None:
             with open(args.config_file, 'r') as f:
                 cfgs = json.load(f)
                 cfgs = remove_comment_keys(cfgs)
+                print(cfgs)
         except Exception as e:
             print(f"read config json file error: {e}")
             sys.exit(1)
@@ -115,6 +116,7 @@ def main(args_: list[str] | None = None) -> None:
     # set mpi info
     mympi = mympi_set(cfgs, myid, comm)
     gdcurv = grid_info_set(mympi, cfgs)
+    mympi.init_buffers(gdcurv.nx, gdcurv.nz)
     for r in range(size):
         if myid == r:
             print(f"Rank {myid}: topoid = {mympi.topoid}")
@@ -132,9 +134,9 @@ def main(args_: list[str] | None = None) -> None:
     linear_tfi(gdcurv, bdry, mympi)
     grid_coord_exchange(gdcurv, mympi)
 
-    if (cfgs['method'] == "dirichlet"):
+    if (next(iter(cfgs['method'])) == "dirichlet"):
         diri_gene(gdcurv, cfgs, mympi, lib)
-    if (cfgs['method'] == "higenstock"):
+    if (next(iter(cfgs['method'])) == "higenstock"):
         higen_gene(gdcurv, cfgs, mympi, lib)
 
     t_end = time.time()

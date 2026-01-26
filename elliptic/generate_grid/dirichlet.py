@@ -1,7 +1,7 @@
 import numpy as np
 import numba
 from mpi4py import MPI
-from mympi import grid_comm_neighbor_adapted
+from mympi import grid_comm_optimized
 from grid_utils import update_SOR, interp_inner_source
 from grid_utils import compute_residual, source
 
@@ -10,10 +10,10 @@ def diri_gene(gdcurv: 'GridData', cfgs: dict, mympi: 'MPIclass', lib=None):
     """
     Dirichlet boundary condition grid generation
     """
-    err_threshold = cfgs['iter_err']
-    max_iter = int(cfgs['max_iter'])
-    coef = cfgs['coef']
-    weight = cfgs['weight']
+    err_threshold = cfgs['method']["dirichlet"]['iter_err']
+    max_iter = int(cfgs['method']["dirichlet"]['max_iter'])
+    coef = cfgs['method']["dirichlet"]['coef']
+    weight = cfgs['method']["dirichlet"]['weight']
     coef = np.array(coef, dtype=np.float32)
     weight = np.array(weight, dtype=np.float32)
 
@@ -80,7 +80,7 @@ def diri_gene(gdcurv: 'GridData', cfgs: dict, mympi: 'MPIclass', lib=None):
         # Update grid using SOR
         update_SOR(x2d, z2d, x2d_tmp, z2d_tmp, nx, nz, src.P, src.Q, omega)
         # Boundary exchange
-        grid_comm_neighbor_adapted(mympi, x2d_tmp, z2d_tmp, nx, nz)
+        grid_comm_optimized(mympi, x2d_tmp, z2d_tmp)
 
         if (cfgs['execute_C_code'] == 1):
             lib.compute_residual_c(x2d, z2d, x2d_tmp, z2d_tmp, local_max, nx, nz)

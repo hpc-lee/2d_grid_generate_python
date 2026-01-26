@@ -197,7 +197,7 @@ def read_bdry(myid: int, bdry: Bdry, geometry_file: str) -> None:
         with open(path, 'r') as f:
             lines = [line.strip() for line in f if line.strip() and not line.startswith('#')]
     except Exception as e:
-        print(f"read config json file error: {e}")
+        print(f"read bdry file error: {e}")
         sys.exit(1)
 
     nx_all = bdry.nx_all
@@ -328,14 +328,16 @@ def cfgs_print(cfgs: dict):
     if cfgs['check_smooth_zt'] == 1:
         print("------- check grid smooth zt direction-------")
     
-    cur_method = cfgs['method']
-    print(f"methon is {cfgs['method']}")
+    cur_method = next(iter(cfgs['method']))
+    print(f"method is {cur_method}")
+
+    params = cfgs['method'][cur_method]
     if (cur_method == 'tfi'):
         pass
     else:
-        print(f"coef: {cfgs['coef']}")
-        print(f"weight:   {cfgs['weight']}")
-        print(f"iter_err: {cfgs['iter_err']}")
-        print(f"max_iter: {cfgs['max_iter']}")
+        print(f"coef:     {params['coef']}")
+        print(f"weight:   {params['weight']}")
+        print(f"iter_err: {params['iter_err']}")
+        print(f"max_iter: {params['max_iter']}")
     
         
