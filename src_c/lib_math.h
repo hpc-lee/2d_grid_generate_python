@@ -25,4 +25,7 @@ void mat_copy2x2(const mat2x2_t A, mat2x2_t B);
 
 void mat_iden2x2(mat2x2_t A);
 
+float
+dist_point2line(float p0[2], float p1[2], float p2[2]);
+
 #endif 

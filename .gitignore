@@ -6,6 +6,9 @@
 *.txt
 __pycache__/
 output/
+verification/
+*.nc
 *.pyc
 *.pyd
+*.pdf
 

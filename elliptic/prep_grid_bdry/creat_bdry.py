@@ -63,7 +63,7 @@ if flag_topo_z:
     x0 = 10.0 * 1e3
     x1 = 30.0 * 1e3
     a = 3.0 * 1e3
-    H = 3.0 * 1e3
+    H = 5.0 * 1e3
     
     for i in range(nx1):
         idx = i + num_pml

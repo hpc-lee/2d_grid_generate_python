@@ -22,7 +22,6 @@ cat << ieof > ${CONFIGS}
     "number_of_mpiprocs_x" : $NPROCS_X,
     "number_of_mpiprocs_z" : $NPROCS_Z,
 
-    "execute_C_code" : 1,
 
     "grid_check" : 1,
     "check_orth" : 1,
@@ -37,7 +36,7 @@ cat << ieof > ${CONFIGS}
     "grid_export_dir" : "${OUTPUTDIR}",
 
     "#method" : "tfi",
-    "#method" : {
+    "method" : {
         "dirichlet" : {
             "coef" : [20,20,20,20],
             "weight" : [0.0,1.0],
@@ -45,7 +44,7 @@ cat << ieof > ${CONFIGS}
             "max_iter" : 5E3
         }
     },
-    "method" : {
+    "#method" : {
         "higenstock" : {
             "coef" : [20,20,20,20],
             "weight" : [0.0,1.0],

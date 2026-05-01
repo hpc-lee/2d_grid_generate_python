@@ -69,48 +69,46 @@ def main(args_: list[str] | None = None) -> None:
     if (args.verbose > 0 and myid == 0):
         cfgs_print(cfgs)
 
-    lib = None
-    if (cfgs['execute_C_code'] == 1):
-        import ctypes
-        lib_path = str(project_root / "src_c" / "libgrid.so")
-        try:
-            lib = ctypes.CDLL(lib_path)
-        except OSError as e:
-            print(f"Rank {myid} 加载C库失败: {e}")
-            comm.Abort(1)  # 所有rank退出，避免死锁
+    import ctypes
+    lib_path = str(project_root / "src_c" / "libgrid.so")
+    try:
+        lib = ctypes.CDLL(lib_path)
+    except OSError as e:
+        print(f"Rank {myid}: failed to load C library: {e}")
+        comm.Abort(1)
 
-        lib.interp_inner_source_c.argtypes = [
-            np.ctypeslib.ndpointer(dtype=np.float32),  # src_P 
-            np.ctypeslib.ndpointer(dtype=np.float32),  # src_P_x1 
-            np.ctypeslib.ndpointer(dtype=np.float32),  # src_P_x2 
-            np.ctypeslib.ndpointer(dtype=np.float32),  # src_P_z1 
-            np.ctypeslib.ndpointer(dtype=np.float32),  # src_P_z2 
-            np.ctypeslib.ndpointer(dtype=np.float32),  # src_Q 
-            np.ctypeslib.ndpointer(dtype=np.float32),  # src_Q_x1 
-            np.ctypeslib.ndpointer(dtype=np.float32),  # src_Q_x2 
-            np.ctypeslib.ndpointer(dtype=np.float32),  # src_Q_z1 
-            np.ctypeslib.ndpointer(dtype=np.float32),  # src_Q_z2 
-            ctypes.c_int,  # nx
-            ctypes.c_int,  # nz
-            ctypes.c_int,  # gni1
-            ctypes.c_int,  # gnk1
-            ctypes.c_int,  # total_nx
-            ctypes.c_int,  # total_nz
-            np.ctypeslib.ndpointer(dtype=np.float32),  # src_Q_z1 
-            np.ctypeslib.ndpointer(dtype=np.float32),  # src_Q_z2 
-            ]
-        lib.interp_inner_source_c.restype = None
+    lib.interp_inner_source_c.argtypes = [
+        np.ctypeslib.ndpointer(dtype=np.float32),
+        np.ctypeslib.ndpointer(dtype=np.float32),
+        np.ctypeslib.ndpointer(dtype=np.float32),
+        np.ctypeslib.ndpointer(dtype=np.float32),
+        np.ctypeslib.ndpointer(dtype=np.float32),
+        np.ctypeslib.ndpointer(dtype=np.float32),
+        np.ctypeslib.ndpointer(dtype=np.float32),
+        np.ctypeslib.ndpointer(dtype=np.float32),
+        np.ctypeslib.ndpointer(dtype=np.float32),
+        np.ctypeslib.ndpointer(dtype=np.float32),
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        np.ctypeslib.ndpointer(dtype=np.float32),
+        np.ctypeslib.ndpointer(dtype=np.float32),
+    ]
+    lib.interp_inner_source_c.restype = None
 
-        lib.compute_residual_c.argtypes = [
-            np.ctypeslib.ndpointer(dtype=np.float32),  # x2d
-            np.ctypeslib.ndpointer(dtype=np.float32),  # z2d
-            np.ctypeslib.ndpointer(dtype=np.float32),  # x2d_tmp
-            np.ctypeslib.ndpointer(dtype=np.float32),  # z2d_tmp
-            np.ctypeslib.ndpointer(dtype=np.float32),    # local_max 
-            ctypes.c_int,  # nx
-            ctypes.c_int,  # nz
-            ]
-        lib.compute_residual_c.restype = None
+    lib.compute_residual_c.argtypes = [
+        np.ctypeslib.ndpointer(dtype=np.float32),
+        np.ctypeslib.ndpointer(dtype=np.float32),
+        np.ctypeslib.ndpointer(dtype=np.float32),
+        np.ctypeslib.ndpointer(dtype=np.float32),
+        np.ctypeslib.ndpointer(dtype=np.float32),
+        ctypes.c_int,
+        ctypes.c_int,
+    ]
+    lib.compute_residual_c.restype = None
 
     t_start = time.time()
     # set mpi info

@@ -78,7 +78,7 @@ def mympi_set(cfgs: dict, myid: int, comm: MPI.Comm) -> MyMPI:
 
     mympi.neighid[0] = left   # west / left
     mympi.neighid[1] = right  # east / right
-    mympi.neighid[2] = down   # south / down (z-direction)
+    mympi.neighid[2] = down   # south / down
     mympi.neighid[3] = up     # north / up
 
     return mympi
@@ -165,6 +165,7 @@ def grid_coord_exchange(gdcurv: GridData, mpi: MyMPI) -> None:
     if z1_neigh != MPI.PROC_NULL:
         x2d[nk1-1, :] = recv_x
         z2d[nk1-1, :] = recv_z
+
 
 def grid_comm_optimized(mympi: MyMPI, x2d: np.ndarray, z2d: np.ndarray) -> None:
     if mympi.send_buffer is not None:

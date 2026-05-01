@@ -1,0 +1,899 @@
+\documentclass[11pt,a4paper]{report}
+
+% Packages
+\usepackage{amsmath,amssymb}
+\usepackage{bm}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{enumitem}
+\usepackage{float}
+\usepackage{longtable}
+
+\geometry{margin=2.5cm}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=blue,
+    urlcolor=blue
+}
+
+\lstset{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red},
+    showstringspaces=false,
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny\color{gray}
+}
+
+\newcommand{\pd}[2]{\frac{\partial #1}{\partial #2}}
+\newcommand{\pdd}[2]{\frac{\partial^2 #1}{\partial #2^2}}
+\newcommand{\rvec}{\bm{r}}
+\newcommand{\nvec}{\bm{n}}
+
+\title{\textbf{2D Curvilinear Grid Generation}\\[0.5em]
+\large User Manual and Algorithm Reference}
+\author{}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This document provides a comprehensive reference for the 2D curvilinear grid generation Python package. The package implements three grid generation methods --- parabolic, hyperbolic, and elliptic --- for constructing body-fitted meshes suitable for seismic wave numerical simulation. This manual covers the mathematical foundations, algorithmic details of each method, grid quality metrics, post-processing capabilities, and configuration guide.
+\end{abstract}
+
+\tableofcontents
+
+%=============================================================================
+\chapter{Introduction}
+%=============================================================================
+
+\section{Background}
+
+Curvilinear grid generation is essential for finite-difference seismic wave simulation in domains with complex topography. Unlike Cartesian grids, curvilinear grids conform to irregular boundaries, eliminating staircase approximation errors at the free surface.
+
+This package provides Python implementations of three grid generation methods, originally developed in C and documented in a doctoral thesis~[1]:
+
+\begin{itemize}
+    \item \textbf{Parabolic method} --- A predictor-corrector scheme that marches from one boundary to another, generating grids with controlled clustering near the surface. Refer to Chapter~3 of~[1] for the full mathematical derivation.
+    \item \textbf{Hyperbolic method} --- A marching method based on orthogonality and area conservation, suitable for extreme topography (steep cliffs, vertical dams). Refer to Chapter~4 of~[1] for details.
+    \item \textbf{Elliptic method} --- An iterative method based on solving elliptic PDEs with source terms, supporting MPI parallel execution. This method is code-documented only (not covered in~[1]).
+\end{itemize}
+
+\section{Scope}
+
+This manual covers:
+\begin{itemize}
+    \item Mathematical foundations of curvilinear coordinates
+    \item Algorithmic principles and implementation details for all three methods
+    \item Grid quality metrics
+    \item Post-processing (merging, sampling, stretching, PML)
+    \item Configuration and usage guide
+\end{itemize}
+
+\section{Computational Coordinates Convention}
+
+Throughout this document, we use the following notation:
+\begin{itemize}
+    \item Physical coordinates: $(x, z)$
+    \item Computational coordinates: $(\xi, \eta)$, where $\xi$ corresponds to the horizontal (x) direction and $\eta$ corresponds to the vertical (z) direction
+    \item In the code, $\xi$ is referred to as \texttt{xi} and $\eta$ as \texttt{zt}
+    \item Grid indices: $i \in [0, N_x-1]$ for $\xi$, $k \in [0, N_z-1]$ for $\eta$
+\end{itemize}
+
+%=============================================================================
+\chapter{Mathematical Foundations}
+%=============================================================================
+
+\section{Curvilinear Coordinate Transformation}
+
+The mapping from computational domain to physical domain is:
+\begin{equation}
+    x = x(\xi, \eta), \quad z = z(\xi, \eta).
+\end{equation}
+
+The position vector at each grid point is:
+\begin{equation}
+    \rvec = [x, z]^T.
+\end{equation}
+
+\section{Metric Tensors}
+
+The covariant metric tensor components are defined as:
+\begin{equation}
+\begin{aligned}
+    g_{11} &= \rvec_{,\xi} \cdot \rvec_{,\xi} = x_{,\xi}^2 + z_{,\xi}^2, \\
+    g_{12} &= \rvec_{,\xi} \cdot \rvec_{,\eta} = x_{,\xi} x_{,\eta} + z_{,\xi} z_{,\eta}, \\
+    g_{22} &= \rvec_{,\eta} \cdot \rvec_{,\eta} = x_{,\eta}^2 + z_{,\eta}^2.
+\end{aligned}
+\end{equation}
+
+\section{Jacobian Determinant}
+
+The Jacobian determinant represents the area scaling factor of the coordinate transformation:
+\begin{equation}
+    J = \begin{vmatrix} x_{,\xi} & x_{,\eta} \\ z_{,\xi} & z_{,\eta} \end{vmatrix} = x_{,\xi} z_{,\eta} - z_{,\xi} x_{,\eta}.
+\end{equation}
+
+For a valid grid, $J > 0$ must hold everywhere, ensuring no cell folding or inversion.
+
+\section{Finite Difference Approximations}
+
+First derivatives (central differences):
+\begin{equation}
+\begin{aligned}
+    x_{,\xi} &\approx \frac{1}{2}(x_{i+1,k} - x_{i-1,k}), \\
+    x_{,\eta} &\approx \frac{1}{2}(x_{i,k+1} - x_{i,k-1}).
+\end{aligned}
+\end{equation}
+
+Second derivatives:
+\begin{equation}
+\begin{aligned}
+    x_{,\xi\xi} &\approx x_{i-1,k} - 2x_{i,k} + x_{i+1,k}, \\
+    x_{,\eta\eta} &\approx x_{i,k-1} - 2x_{i,k} + x_{i,k+1}.
+\end{aligned}
+\end{equation}
+
+Mixed derivative:
+\begin{equation}
+    x_{,\xi\eta} \approx \frac{1}{4}(x_{i+1,k+1} + x_{i-1,k-1} - x_{i-1,k+1} - x_{i+1,k-1}).
+\end{equation}
+
+%=============================================================================
+\chapter{Parabolic Grid Generation}
+%=============================================================================
+
+The parabolic method generates grids by marching from one boundary toward the other, using a predictor-corrector approach. It combines algebraic prediction with elliptic correction at each marching step.
+
+\section{Governing Equation}
+
+The parabolic grid generation equation is a quasi-elliptic PDE:
+\begin{equation}
+    g_{22} f_{,\xi\xi} + g_{11} f_{,\eta\eta} - 2g_{12} f_{,\xi\eta} = 0,
+    \label{eq:para-gov}
+\end{equation}
+where $f$ represents either the $x$ or $z$ coordinate, and the metric coefficients $g_{11}$, $g_{12}$, $g_{22}$ are computed from the current grid.
+
+\section{Predictor Step: Algebraic Prediction}
+
+The predictor step generates an initial guess for the next grid layer using a combination of orthogonal projection and linear extrapolation.
+
+\subsection{Normal Vector Computation}
+
+Given the current layer $\rvec_{i,j}$ and the previous layer $\rvec_{i,j-1}$, define the displacement vector:
+\begin{equation}
+    \bm{R} = \rvec_{i,j-1} - \rvec_{i,J},
+\end{equation}
+where $J$ is the target boundary index.
+
+The unit normal vector to the current grid line is:
+\begin{equation}
+    \nvec = \frac{z_{,\xi} \hat{\bm{i}} - x_{,\xi} \hat{\bm{j}}}{\sqrt{x_{,\xi}^2 + z_{,\xi}^2}}.
+\end{equation}
+
+\subsection{Prediction Points}
+
+Two candidate prediction points are computed:
+
+\textbf{Orthogonal prediction} (normal to current grid line):
+\begin{equation}
+    \rvec_o = \rvec_{i,j-1} + \varepsilon_c |\bm{R}| \nvec.
+\end{equation}
+
+\textbf{Linear prediction} (along displacement direction):
+\begin{equation}
+    \rvec_s = \rvec_{i,j-1} + \varepsilon_c \bm{R}.
+\end{equation}
+
+\textbf{Final prediction} (weighted combination):
+\begin{equation}
+    \rvec_{i,j+1} = \varepsilon_s \rvec_o + (1 - \varepsilon_s) \rvec_s,
+\end{equation}
+where the switching factor is:
+\begin{equation}
+    \varepsilon_s = e^{-a\eta}, \quad \eta = \frac{j-1}{J-1}.
+\end{equation}
+
+Here, $a$ is the clustering coefficient (parameter \texttt{coef} in the configuration). A smaller $a$ causes $\varepsilon_s$ to decay more slowly, resulting in better grid orthogonality near the free surface, but potentially reducing grid smoothness and even causing grid crossing.
+
+\subsection{Improved Step Coefficients}
+
+The coefficients $\varepsilon_c$ and $\varepsilon_i$ are computed using normalized arc-length distances:
+\begin{equation}
+\begin{aligned}
+    \varepsilon_c &= \frac{d_{j+1} - d_{j-1}}{d_J - d_{j-1}}, \\
+    \varepsilon_i &= \frac{d_j - d_{j-1}}{d_{j+1} - d_{j-1}},
+\end{aligned}
+\end{equation}
+where the cumulative arc length is:
+\begin{equation}
+    d_1 = 0, \quad d_j = d_{j-1} + h_{j-1} \quad (j = 2, 3, \ldots, J),
+\end{equation}
+and $h_j$ is the step length at layer $j$ from the step file.
+
+\section{Corrector Step: Elliptic Solve}
+
+After prediction, the corrector step solves the discretized elliptic equation~\eqref{eq:para-gov} using the Thomas algorithm for the resulting tridiagonal system.
+
+\subsection{Discretization}
+
+Discretizing Eq.~\eqref{eq:para-gov} at each interior point $(i, j)$:
+\begin{equation}
+    g_{22}(f_{i-1,j} - 2f_{i,j} + f_{i+1,j}) + g_{11}(f_{i,j-1} - 2f_{i,j} + f_{i,j+1}) - 2g_{12} f_{,\xi\eta} = 0.
+\end{equation}
+
+For each layer $j$, the known values are $f_{i,j-1}$ (previous layer) and $f_{i,j+1}$ (predicted layer), leading to a tridiagonal system in the $\xi$-direction:
+\begin{equation}
+    a_i f_{i-1,j} + b_i f_{i,j} + c_i f_{i+1,j} = D_i,
+\end{equation}
+where:
+\begin{equation}
+\begin{aligned}
+    a_i &= g_{22}, \\
+    b_i &= -2(g_{11} + g_{22}), \\
+    c_i &= g_{22}, \\
+    D_i &= -g_{11}(f_{i,j-1} + f_{i,j+1}) + 2g_{12} f_{,\xi\eta}.
+\end{aligned}
+\end{equation}
+
+\subsection{Boundary Conditions}
+
+At the lateral boundaries ($i=1$ and $i=I-1$), geometric symmetry is applied:
+\begin{equation}
+\begin{aligned}
+    \rvec_{1,j} &= 2\rvec_{2,j} - \rvec_{3,j}, \\
+    \rvec_{I,j} &= 2\rvec_{I-1,j} - \rvec_{I-2,j}.
+\end{aligned}
+\end{equation}
+
+\section{Thomas Algorithm}
+
+The tridiagonal system is solved efficiently using the Thomas algorithm (TDMA), which runs in $O(N)$ time:
+
+\begin{enumerate}
+    \item \textbf{Forward elimination}: For $i = 2, 3, \ldots, N-1$:
+    \begin{equation}
+    \begin{aligned}
+        c'_i &= c_i / (b_i - a_i c'_{i-1}), \\
+        D'_i &= (D_i - a_i D'_{i-1}) / (b_i - a_i c'_{i-1}),
+    \end{aligned}
+    \end{equation}
+    with $c'_1 = c_1/b_1$ and $D'_1 = D_1/b_1$.
+
+    \item \textbf{Back substitution}: For $i = N-1, N-2, \ldots, 1$:
+    \begin{equation}
+        f_i = D'_i - c'_i f_{i+1}.
+    \end{equation}
+\end{enumerate}
+
+\section{Marching Direction}
+
+The parameter \texttt{t2b} controls the marching direction:
+\begin{itemize}
+    \item \texttt{t2b = 1}: March from top boundary (boundary 2) to bottom boundary (boundary 1)
+    \item \texttt{t2b = 0}: March from bottom boundary (boundary 1) to top boundary (boundary 2)
+\end{itemize}
+
+%=============================================================================
+\chapter{Hyperbolic Grid Generation}
+%=============================================================================
+
+The hyperbolic method generates grids by marching from a single boundary, enforcing orthogonality and area conservation at each step. It is particularly suitable for extreme topography where the parabolic method may fail.
+
+\section{Governing Equations}
+
+The hyperbolic grid generation is based on two conditions:
+
+\textbf{Orthogonality condition}:
+\begin{equation}
+    \rvec_{j,\xi} \cdot \rvec_{j,\eta} = 0.
+    \label{eq:hyper-orth}
+\end{equation}
+
+\textbf{Area conservation condition}:
+\begin{equation}
+    \rvec_{j,\xi} \times \rvec_{j,\eta} = \Delta A_j,
+    \label{eq:hyper-area}
+\end{equation}
+where $\Delta A_j$ is the specified cell area at layer $j$.
+
+\section{Linearization and Matrix Form}
+
+Linearizing Eqs.~\eqref{eq:hyper-orth}--\eqref{eq:hyper-area} about the known layer $j-1$:
+\begin{equation}
+    \bm{A}_{j-1} \rvec_{j,\xi} + \bm{B}_{j-1} \rvec_{j,\eta} = \bm{f}_j,
+\end{equation}
+where the coefficient matrices are:
+\begin{equation}
+    \bm{A} = \begin{bmatrix} x_{j-1,\eta} & z_{j-1,\eta} \\ z_{j-1,\eta} & -x_{j-1,\eta} \end{bmatrix}, \quad
+    \bm{B} = \begin{bmatrix} x_{j-1,\xi} & z_{j-1,\xi} \\ -z_{j-1,\xi} & x_{j-1,\xi} \end{bmatrix},
+\end{equation}
+\begin{equation}
+    \bm{f} = \begin{bmatrix} 0 \\ \Delta A_{j-1} + \Delta A_j \end{bmatrix}.
+\end{equation}
+
+The $\eta$-direction derivatives are approximated from the known layer:
+\begin{equation}
+\begin{aligned}
+    x_{j-1,\eta} &= -\frac{z_{j-1,\xi} \Delta A_{j-1}}{x_{j-1,\xi}^2 + z_{j-1,\xi}^2}, \\
+    z_{j-1,\eta} &= \frac{x_{j-1,\xi} \Delta A_{j-1}}{x_{j-1,\xi}^2 + z_{j-1,\xi}^2}.
+\end{aligned}
+\end{equation}
+
+\section{Block Tridiagonal System}
+
+Writing the system in terms of the increment $\Delta \rvec_j = \rvec_j - \rvec_{j-1}$ and applying central differences for $\xi$-derivatives yields a block tridiagonal system with $2 \times 2$ blocks at each grid point:
+
+\begin{equation}
+    (\bm{I} + \bm{B}_{j-1}^{-1} \bm{A}_{j-1} D_\xi) \Delta \rvec_j = \bm{B}_{j-1}^{-1} \bm{e}_j,
+\end{equation}
+where $\bm{e}_j = [0, \Delta A_j]^T$ and $D_\xi$ is the central difference operator.
+
+This system is solved using the block Thomas algorithm (ThomasBlock), which generalizes the scalar Thomas algorithm to $2 \times 2$ block matrices.
+
+\section{Artificial Dissipation}
+
+To ensure stability and smoothness, artificial dissipation terms are added:
+\begin{equation}
+    (\bm{I} + \bm{B}_{j-1}^{-1} \bm{A}_{j-1} D_\xi - \varepsilon_{i\xi} (\Delta \nabla)_\xi) \Delta \rvec_j = \bm{B}_{j-1}^{-1} \bm{e}_j + \varepsilon_{e\xi} (\Delta \nabla)_\xi \rvec_{j-1},
+    \label{eq:hyper-dissipation}
+\end{equation}
+where the second-order dissipation operator is:
+\begin{equation}
+    (\Delta \nabla)_\xi \rvec = \rvec_{i-1} + \rvec_{i+1} - 2\rvec_i,
+\end{equation}
+and $\varepsilon_{i\xi} = 2 \varepsilon_{e\xi}$.
+
+\section{Adaptive Dissipation Coefficient}
+
+The dissipation coefficient adapts to local grid geometry:
+\begin{equation}
+    \varepsilon_{e\xi} = \varepsilon_c \cdot N_\xi \cdot S \cdot \hat{d}_\xi \cdot a_\xi,
+\end{equation}
+where $\varepsilon_c$ is the base coefficient (parameter \texttt{coef} in config), and the four factors are:
+
+\subsection{Aspect Ratio Factor}
+\begin{equation}
+    N_\xi = \sqrt{\frac{x_{,\eta}^2 + z_{,\eta}^2}{x_{,\xi}^2 + z_{,\xi}^2}}.
+\end{equation}
+
+\subsection{Depth Factor}
+\begin{equation}
+    S = \sqrt{\frac{j-1}{J-1}}.
+\end{equation}
+
+\subsection{Clustering Detection Factor}
+\begin{equation}
+    \hat{d}_\xi = \max[d_\xi^{2/S}, 0.1],
+\end{equation}
+\begin{equation}
+    d_\xi = \frac{|\rvec_{i+1,j-2} - \rvec_{i,j-2}| + |\rvec_{i,j-2} - \rvec_{i-1,j-2}|}
+                  {|\rvec_{i+1,j-1} - \rvec_{i,j-1}| + |\rvec_{i,j-1} - \rvec_{i-1,j-1}|}.
+\end{equation}
+
+\subsection{Angle Factor}
+The angle factor detects concave corners where additional dissipation is needed. Define unit direction vectors:
+\begin{equation}
+\begin{aligned}
+    \rvec_\xi^+ &= \frac{\rvec_{i+1,j-1} - \rvec_{i,j-1}}{|\rvec_{i+1,j-1} - \rvec_{i,j-1}|}, \\
+    \rvec_\xi^- &= \frac{\rvec_{i-1,j-1} - \rvec_{i,j-1}}{|\rvec_{i-1,j-1} - \rvec_{i,j-1}|}.
+\end{aligned}
+\end{equation}
+
+Compute the angle $\theta$ at the grid point:
+\begin{equation}
+    \beta = \text{atan2}(-(\rvec_\xi^+ \times \rvec_\xi^-), (\rvec_\xi^+ \cdot \rvec_\xi^-)),
+\end{equation}
+\begin{equation}
+    \theta = \begin{cases} \beta + 2\pi & \text{if } \beta < 0, \\ \beta & \text{if } \beta \ge 0. \end{cases}
+\end{equation}
+
+The angle factor is:
+\begin{equation}
+    a_\xi = \begin{cases} \dfrac{1}{1 - \cos^2(\theta/2)} & \text{if } 0 < \theta < \pi, \\ 1 & \text{if } \pi \le \theta \le 2\pi. \end{cases}
+\end{equation}
+
+\section{Floating Boundary Conditions}
+
+At the lateral boundaries, floating (Neumann-like) conditions are applied:
+\begin{equation}
+\begin{aligned}
+    \Delta \rvec_{1,j} &= \Delta \rvec_{2,j}, \\
+    \Delta \rvec_{I,j} &= \Delta \rvec_{I-1,j}.
+\end{aligned}
+\end{equation}
+
+\section{Arc-Length Stretching}
+
+After grid generation, points can be redistributed along each vertical line using arc-length stretching. The cumulative arc length along a vertical grid line is:
+\begin{equation}
+    s_1 = 0, \quad s_k = s_{k-1} + |\rvec_k - \rvec_{k-1}| \quad (k = 2, 3, \ldots, N_z).
+\end{equation}
+
+New grid points are placed at specified arc-length positions via linear interpolation.
+
+\section{Area Specification}
+
+The cell area at each layer is determined by the step file:
+\begin{equation}
+    \Delta A_j = \Delta s_{j-1} \cdot dh_j,
+\end{equation}
+where $\Delta s_{j-1}$ is the arc length of the current grid line and $dh_j$ is the step length from the step file.
+
+%=============================================================================
+\chapter{Elliptic Grid Generation}
+%=============================================================================
+
+The elliptic method generates grids by iteratively solving elliptic PDEs with source terms. Unlike the marching methods, all four boundaries are fixed and the interior grid is determined by the solution of the PDE. The method supports MPI parallel execution for large-scale grids.
+
+\section{Governing Equation}
+
+The elliptic grid generation system with source terms $P$ and $Q$ is:
+\begin{equation}
+    g_{22} \rvec_{,\xi\xi} - 2g_{12} \rvec_{,\xi\eta} + g_{11} \rvec_{,\eta\eta} + g_{22} P \rvec_{,\xi} + g_{11} Q \rvec_{,\eta} = 0.
+    \label{eq:ellip-gov}
+\end{equation}
+
+The source terms $P$ and $Q$ control grid spacing and clustering. Without them ($P = Q = 0$), the equation reduces to the Laplace equation, producing smooth but potentially non-uniform grids.
+
+\section{Initialization: Transfinite Interpolation (TFI)}
+
+The initial grid is generated using linear transfinite interpolation from the four boundaries. Let $\xi = i/(N_x-1)$ and $\eta = k/(N_z-1)$ denote normalized coordinates.
+
+The TFI formula is:
+\begin{equation}
+    \rvec(\xi, \eta) = \bm{U}(\xi, \eta) + \bm{W}(\xi, \eta) - \bm{UW}(\xi, \eta),
+\end{equation}
+where:
+
+$\xi$-direction interpolation (from x-boundaries):
+\begin{equation}
+    \bm{U}(\xi, \eta) = (1-\xi) \bm{B}_{x1}(\eta) + \xi \bm{B}_{x2}(\eta),
+\end{equation}
+
+$\eta$-direction interpolation (from z-boundaries):
+\begin{equation}
+    \bm{W}(\xi, \eta) = (1-\eta) \bm{B}_{z1}(\xi) + \eta \bm{B}_{z2}(\xi),
+\end{equation}
+
+Bilinear corner interpolation (to avoid double-counting):
+\begin{equation}
+\begin{split}
+    \bm{UW}(\xi, \eta) = & (1-\xi)(1-\eta)\bm{B}_{x1}(0) + (1-\xi)\eta\bm{B}_{x1}(N_z-1) \\
+    & + \xi(1-\eta)\bm{B}_{x2}(0) + \xi\eta\bm{B}_{x2}(N_z-1).
+\end{split}
+\end{equation}
+
+\section{SOR Iteration}
+
+Equation~\eqref{eq:ellip-gov} is solved iteratively using the successive over-relaxation (SOR) method (Gauss-Seidel with relaxation factor $\omega$; currently $\omega = 1.0$).
+
+\subsection{Update Formula}
+
+For each interior point $(k, i)$, the new value is computed as:
+\begin{equation}
+    \rvec_{k,i}^{\text{tmp}} = \frac{1}{2(g_{11} + g_{22})} \left[ g_{22}(\rvec_{k,i+1} + \rvec_{k,i-1}) + g_{11}(\rvec_{k+1,i} + \rvec_{k-1,i}) - 2g_{12} \rvec_{,\xi\eta} + g_{22} P \rvec_{,\xi} + g_{11} Q \rvec_{,\eta} \right],
+\end{equation}
+\begin{equation}
+    \rvec_{k,i}^{\text{new}} = \omega \rvec_{k,i}^{\text{tmp}} + (1-\omega) \rvec_{k,i}^{\text{old}}.
+\end{equation}
+
+Gauss-Seidel ordering is used: updated values are immediately used for subsequent points.
+
+\subsection{Convergence Check}
+
+The iteration converges when the maximum normalized residual falls below \texttt{iter\_err}:
+\begin{equation}
+    \max_i \frac{|\Delta \rvec_i|}{h_i} < \epsilon,
+\end{equation}
+where $\Delta \rvec = \rvec^{\text{new}} - \rvec^{\text{old}}$, $h_i$ is the local grid spacing, and $\epsilon$ is the convergence tolerance.
+
+The global maximum is computed via \texttt{MPI\_Allreduce} with \texttt{MPI\_MAX}.
+
+\section{Source Term Computation}
+
+Two methods are available for computing boundary source terms: Dirichlet and Higenstock.
+
+\subsection{Dirichlet Method}
+
+The Dirichlet method computes boundary source terms from the second derivatives of the grid coordinates.
+
+For each boundary point, the source terms are:
+\begin{equation}
+\begin{aligned}
+    P_{\text{bdry}} &= -\left( \frac{\rvec_{,\xi} \cdot \rvec_{,\xi\xi}}{g_{11}} + \frac{\rvec_{,\xi} \cdot \rvec_{,\eta\eta}}{g_{22}} \right), \\
+    Q_{\text{bdry}} &= -\left( \frac{\rvec_{,\eta} \cdot \rvec_{,\xi\xi}}{g_{11}} + \frac{\rvec_{,\eta} \cdot \rvec_{,\eta\eta}}{g_{22}} \right).
+\end{aligned}
+\end{equation}
+
+\textbf{Ghost point calculation}: For physical boundaries, ghost points are computed by projecting the interior gradient onto the boundary normal:
+\begin{enumerate}
+    \item Compute the tangent vector along the boundary.
+    \item Compute the outward normal: $\nvec = (z_{,\eta}, -x_{,\eta}) / |\rvec_{,\eta}|$.
+    \item Project the interior gradient: $\Delta \rvec_n = (\Delta \rvec \cdot \nvec) \nvec$.
+    \item Set ghost point: $\rvec_{\text{ghost}} = \rvec_{\text{bdry}} - \Delta \rvec_n$.
+\end{enumerate}
+
+\subsection{Higenstock Method}
+
+The Higenstock method uses angle-based control with \texttt{tanh} feedback to enforce orthogonality at boundaries.
+
+The angle between grid lines at the boundary is:
+\begin{equation}
+    \theta = \arccos\left( \frac{\rvec_{,\xi} \cdot \rvec_{,\eta}}{|\rvec_{,\xi}| |\rvec_{,\eta}|} \right).
+\end{equation}
+
+Source terms are updated iteratively with feedback:
+\begin{equation}
+\begin{aligned}
+    P &\leftarrow P + a \tanh\left( \frac{dx - |\rvec_{,\xi}|}{dx} \right), \\
+    Q &\leftarrow Q - a \tanh\left( \frac{\theta_0 - \theta}{\theta_0} \right),
+\end{aligned}
+\end{equation}
+where $\theta_0 = \pi/2$ (target orthogonality) and $a$ is a feedback gain parameter. The signs are adjusted for each boundary direction.
+
+\section{Interior Source Interpolation}
+
+Boundary source terms are interpolated to the interior using exponential decay weighting:
+\begin{equation}
+\begin{aligned}
+    P &= w_0 \left[ (1-\xi) P_{x1} + \xi P_{x2} \right] + w_1 \left[ e^{-c_2\eta} P_{z1} + e^{-c_3(1-\eta)} P_{z2} \right], \\
+    Q &= w_0 \left[ e^{-c_0\xi} Q_{x1} + e^{-c_1(1-\xi)} Q_{x2} \right] + w_1 \left[ (1-\eta) Q_{z1} + \eta Q_{z2} \right],
+\end{aligned}
+\end{equation}
+where $c = [c_0, c_1, c_2, c_3]$ are the \texttt{coef} parameters and $w = [w_0, w_1]$ are the \texttt{weight} parameters.
+
+The exponential decay ensures that source terms from one boundary diminish toward the opposite boundary, preventing unintended grid distortion far from the controlling boundary.
+
+\section{MPI Domain Decomposition}
+
+The elliptic solver uses a 2D Cartesian topology for MPI parallelization:
+
+\begin{enumerate}
+    \item \textbf{Domain decomposition}: The global grid is divided into $N_{px} \times N_{pz}$ subdomains, each assigned to one MPI rank.
+    \item \textbf{Ghost cells}: Each subdomain has one layer of ghost cells on each side, exchanged with neighboring ranks after each SOR sweep.
+    \item \textbf{Communication}:
+    \begin{itemize}
+        \item \texttt{MPI\_Sendrecv} (or \texttt{MPI\_Neighbor\_alltoallw}) for ghost cell exchange
+        \item \texttt{MPI\_Allreduce(..., MPI\_SUM)} for boundary source term aggregation
+        \item \texttt{MPI\_Allreduce(..., MPI\_MAX)} for convergence check
+        \item \texttt{MPI\_Bcast} for initial configuration broadcast
+    \end{itemize}
+    \item \textbf{Load balancing}: All ranks perform the same number of SOR iterations; convergence is checked globally.
+\end{enumerate}
+
+%=============================================================================
+\chapter{Grid Quality Metrics}
+%=============================================================================
+
+\section{Orthogonality}
+
+The orthogonality metric measures the deviation from $90^\circ$ between intersecting grid lines:
+\begin{equation}
+    Q = 90 - |\theta - 90|,
+\end{equation}
+where $\theta = \arccos\left( \frac{\rvec_{,\xi} \cdot \rvec_{,\eta}}{|\rvec_{,\xi}| |\rvec_{,\eta}|} \right)$.
+
+Perfect orthogonality yields $Q = 90$. Values below $45$ indicate poor grid quality.
+
+\section{Jacobian Determinant}
+
+The Jacobian represents the signed area of grid cells:
+\begin{equation}
+    J = x_{,\xi} z_{,\eta} - z_{,\xi} x_{,\eta}.
+\end{equation}
+
+Negative values indicate cell folding (grid inversion). Zero values indicate degenerate cells.
+
+\section{Aspect Ratio}
+
+The aspect ratio measures the ratio of adjacent cell dimensions:
+\begin{equation}
+    R = \max\left( \frac{|\rvec_{,\xi}|}{|\rvec_{,\eta}|}, \frac{|\rvec_{,\eta}|}{|\rvec_{,\xi}|} \right).
+\end{equation}
+
+$R = 1$ indicates a square cell. Large values indicate highly elongated cells.
+
+\section{Step Sizes}
+
+The physical step lengths in each direction:
+\begin{equation}
+\begin{aligned}
+    \Delta s_\xi &= |\rvec_{i+1,k} - \rvec_{i,k}|, \\
+    \Delta s_\eta &= |\rvec_{i,k+1} - \rvec_{i,k}|.
+\end{aligned}
+\end{equation}
+
+The minimum step size determines the CFL stability limit for seismic wave simulation.
+
+\section{Smoothness}
+
+The smoothness metric measures the ratio of adjacent step lengths:
+\begin{equation}
+\begin{aligned}
+    S_\xi &= \max\left( \frac{|\rvec_{i+1} - \rvec_i|}{|\rvec_i - \rvec_{i-1}|}, \frac{|\rvec_i - \rvec_{i-1}|}{|\rvec_{i+1} - \rvec_i|} \right), \\
+    S_\eta &= \max\left( \frac{|\rvec_{k+1} - \rvec_k|}{|\rvec_k - \rvec_{k-1}|}, \frac{|\rvec_k - \rvec_{k-1}|}{|\rvec_{k+1} - \rvec_k|} \right).
+\end{aligned}
+\end{equation}
+
+$S = 1$ indicates uniform spacing. Large values indicate abrupt changes in grid spacing.
+
+\section{Minimum Distance (CFL Stability)}
+
+The function \texttt{cal\_min\_dist} computes the minimum point-to-line distance across all interior grid cells, which determines the maximum stable time step for the finite-difference scheme via the CFL condition.
+
+For each interior point, four point-to-line distances are computed (corresponding to the four cells surrounding the point):
+\begin{equation}
+    d = \frac{|A x_0 + B z_0 + C|}{\sqrt{A^2 + B^2}},
+\end{equation}
+where $A$, $B$, $C$ define the line through two adjacent grid points.
+
+%=============================================================================
+\chapter{Post-Processing}
+%=============================================================================
+
+\section{Grid Import and Merging}
+
+The post-processor reads grid coordinates from MPI-partitioned NetCDF files and optionally merges multiple grids along the x or z direction.
+
+\subsection{Import}
+
+Each partition is identified by its \texttt{px\{i\}\_pz\{k\}} filename, containing global index and count attributes that specify the position and size of the partition within the global grid.
+
+\subsection{Merging}
+
+When merging along the x-direction, grids are concatenated horizontally with one overlapping column removed at each junction. Similarly for the z-direction:
+\begin{equation}
+    N_x^{\text{total}} = \sum_i N_x^{(i)} - (n_{\text{grids}} - 1).
+\end{equation}
+
+\section{Grid Sampling (Upsampling)}
+
+Grid sampling increases the resolution of an existing grid using bilinear interpolation. Given a sampling factor $(s_x, s_z)$, the new grid dimensions are:
+\begin{equation}
+    N_x' = (N_x - 1) s_x + 1, \quad N_z' = (N_z - 1) s_z + 1.
+\end{equation}
+
+The interpolated coordinates at sub-grid position $(\alpha, \beta)$ within cell $(i, k)$ are:
+\begin{equation}
+\begin{split}
+    \rvec(\alpha, \beta) = & (1-\alpha)(1-\beta) \rvec_{i,k} + \alpha(1-\beta) \rvec_{i+1,k} \\
+    & + (1-\alpha)\beta \rvec_{i,k+1} + \alpha\beta \rvec_{i+1,k+1}.
+\end{split}
+\end{equation}
+
+\section{Arc-Length Stretching}
+
+Arc-length stretching redistributes grid points along each grid line according to a specified arc-length distribution, enabling non-uniform spacing (e.g., finer near the surface, coarser at depth).
+
+\section{PML Layer Support}
+
+The post-processor supports PML (Perfectly Matched Layer) partitioning, which doubles the computational weight of PML regions when distributing the grid across MPI ranks for seismic simulation.
+
+%=============================================================================
+\chapter{Configuration Guide}
+%=============================================================================
+
+\section{JSON Format}
+
+All parameters are specified in a JSON configuration file. Keys prefixed with \texttt{\#} are treated as comments and ignored by the parser.
+
+\section{Common Parameters}
+
+\begin{longtable}{p{5.5cm} p{2cm} p{7cm}}
+\toprule
+\textbf{Key} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\texttt{number\_of\_grid\_points\_x} & int & Number of grid points in x direction \\
+\texttt{number\_of\_grid\_points\_z} & int & Number of grid points in z direction \\
+\texttt{execute\_C\_code} & 0/1 & Use C backend acceleration \\
+\texttt{grid\_check} & 0/1 & Enable grid quality checks \\
+\texttt{check\_orth} & 0/1 & Check orthogonality \\
+\texttt{check\_jac} & 0/1 & Check Jacobian \\
+\texttt{check\_ratio} & 0/1 & Check aspect ratio \\
+\texttt{check\_step\_xi} & 0/1 & Check step size in xi \\
+\texttt{check\_step\_zt} & 0/1 & Check step size in zt \\
+\texttt{check\_smooth\_xi} & 0/1 & Check smoothness in xi \\
+\texttt{check\_smooth\_zt} & 0/1 & Check smoothness in zt \\
+\texttt{geometry\_input\_file} & string & Path to boundary geometry file \\
+\texttt{grid\_export\_dir} & string & Output directory \\
+\bottomrule
+\end{longtable}
+
+\section{Parabolic Parameters}
+
+\begin{longtable}{p{5.5cm} p{2cm} p{7cm}}
+\toprule
+\textbf{Key} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\texttt{step\_input\_file} & string & Step length file (nz-1 lines) \\
+\texttt{coef} & int & Clustering coefficient $a$ in $\varepsilon_s = e^{-a\eta}$ \\
+\texttt{t2b} & 0/1 & Marching direction: 1=top$\to$bottom \\
+\bottomrule
+\end{longtable}
+
+\section{Hyperbolic Parameters}
+
+\begin{longtable}{p{5.5cm} p{2cm} p{7cm}}
+\toprule
+\textbf{Key} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\texttt{step\_input\_file} & string & Step length file (nz-1 lines) \\
+\texttt{flag\_stretch} & 0/1 & Enable arc-length stretching \\
+\texttt{coef} & int & Base dissipation coefficient $\varepsilon_c$ \\
+\texttt{t2b} & 0/1 & Marching direction: 1=top$\to$bottom \\
+\bottomrule
+\end{longtable}
+
+\section{Elliptic Parameters}
+
+\begin{longtable}{p{5.5cm} p{2cm} p{7cm}}
+\toprule
+\textbf{Key} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\texttt{number\_of\_mpiprocs\_x} & int & MPI processes in x direction \\
+\texttt{number\_of\_mpiprocs\_z} & int & MPI processes in z direction \\
+\texttt{method} & object & Sub-method config (\S\ref{sec:method-config}) \\
+\bottomrule
+\end{longtable}
+
+\subsection{Method Sub-configuration}
+\label{sec:method-config}
+
+Choose either \texttt{dirichlet} or \texttt{higenstock}:
+
+\begin{longtable}{p{5.5cm} p{2cm} p{7cm}}
+\toprule
+\textbf{Key} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\texttt{coef} & [int$\times$4] & Source term coefficients $[c_0, c_1, c_2, c_3]$ for 4 boundaries \\
+\texttt{weight} & [float$\times$2] & Interpolation weights $[w_0, w_1]$ for $\xi$ and $\eta$ directions \\
+\texttt{iter\_err} & float & Convergence tolerance $\epsilon$ \\
+\texttt{max\_iter} & int & Maximum SOR iterations \\
+\bottomrule
+\end{longtable}
+
+\section{Post-Processing Parameters}
+
+\begin{longtable}{p{5.5cm} p{2cm} p{7cm}}
+\toprule
+\textbf{Key} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\texttt{input\_grid\_number} & int & Number of input grids \\
+\texttt{number\_of\_mpiprocs\_out} & [int, int] & Output MPI partitioning $[n_x, n_z]$ \\
+\texttt{merge\_direction} & string & Merge direction: \texttt{"x"} or \texttt{"z"} \\
+\texttt{flag\_sample} & 0/1 & Enable bilinear sampling \\
+\texttt{sample\_factor} & [int, int] & Upsampling factors $[s_x, s_z]$ \\
+\texttt{pml\_weight\_2x} & 0/1 & Double PML computation weight \\
+\texttt{number\_of\_pml\_x1} & int & PML layers at x1 boundary \\
+\texttt{number\_of\_pml\_x2} & int & PML layers at x2 boundary \\
+\texttt{number\_of\_pml\_z1} & int & PML layers at z1 boundary \\
+\texttt{number\_of\_pml\_z2} & int & PML layers at z2 boundary \\
+\bottomrule
+\end{longtable}
+
+%=============================================================================
+\chapter{Installation and Usage}
+%=============================================================================
+
+\section{Dependencies}
+
+\begin{itemize}
+    \item Python $\geq$ 3.10
+    \item NumPy
+    \item Numba
+    \item netCDF4
+    \item mpi4py (elliptic method only)
+    \item Matplotlib (plotting only)
+    \item GCC (for building C backend)
+\end{itemize}
+
+\section{Building the C Backend}
+
+\begin{lstlisting}[language=bash]
+cd src_c && bash build.sh
+\end{lstlisting}
+
+This compiles \texttt{libgrid.so}, which is loaded via Python ctypes at runtime.
+
+\section{Running Grid Generation}
+
+\subsection{Parabolic}
+\begin{lstlisting}[language=bash]
+cd parabolic/generate_grid
+bash start.sh
+# Or directly:
+python para.py --config-file config.json --verbose 10
+\end{lstlisting}
+
+\subsection{Hyperbolic}
+\begin{lstlisting}[language=bash]
+cd hyperbolic/generate_grid
+bash start.sh
+# Or directly:
+python hyper.py --config-file config.json --verbose 10
+\end{lstlisting}
+
+\subsection{Elliptic (MPI)}
+\begin{lstlisting}[language=bash]
+cd elliptic/generate_grid
+bash start.sh
+# Or directly:
+mpiexec -np 4 python ellip.py --config-file config.json --verbose 10
+\end{lstlisting}
+
+\subsection{Post-Processing}
+\begin{lstlisting}[language=bash]
+cd grid_post_process
+bash start.sh
+# Or directly:
+python post_pro.py --config-file config.json --verbose 10
+\end{lstlisting}
+
+%=============================================================================
+\appendix
+\chapter{File Formats}
+%=============================================================================
+
+\section{Geometry File}
+
+For parabolic/hyperbolic methods, the geometry file contains boundary coordinates:
+\begin{itemize}
+    \item Parabolic: $2 \times N_x$ lines (two boundaries), each line: \texttt{x z}
+    \item Hyperbolic: $N_x$ lines (one boundary), each line: \texttt{x z}
+    \item Elliptic: 4 boundary blocks, each preceded by a \texttt{\# boundary\_x} comment line
+    \item Lines starting with \texttt{\#} are comments
+\end{itemize}
+
+\section{Step File}
+
+The step file specifies the marching step length at each layer:
+\begin{itemize}
+    \item $N_z - 1$ lines, each containing a float value
+    \item Lines starting with \texttt{\#} are comments
+\end{itemize}
+
+\section{NetCDF Output Format}
+
+Output files follow the naming convention \texttt{\{prefix\}\_px\{i\}\_pz\{k\}.nc}, where:
+\begin{itemize}
+    \item \texttt{prefix}: \texttt{coord} for coordinates, or quality metric name (\texttt{orth}, \texttt{jacobi}, etc.)
+    \item \texttt{px\{i\}\_pz\{k\}}: MPI partition index
+\end{itemize}
+
+Each file contains:
+\begin{itemize}
+    \item Global attributes: \texttt{global\_index\_of\_first\_physical\_points} and \texttt{count\_of\_physical\_points}
+    \item Variables: dimensions \texttt{(k, i)} with \texttt{float32} type
+    \item For coordinate files: variables \texttt{x} and \texttt{z}
+    \item For quality files: one variable named after the quality metric
+\end{itemize}
+
+\section{Arc-Length File}
+
+The arc-length file specifies the cumulative arc-length distribution for stretching:
+\begin{itemize}
+    \item $N$ float values (one per line), monotonically increasing
+    \item Lines starting with \texttt{\#} are comments
+    \item C format: first line is the number of points, followed by $N$ values
+\end{itemize}
+
+\chapter*{References}
+\addcontentsline{toc}{chapter}{References}
+
+\begin{enumerate}
+    \item Doctoral thesis: ``Seismic Wave Numerical Simulation Methods Under Complex Topography Conditions'' --- Chapters 3 (parabolic method) and 4 (hyperbolic method).
+\end{enumerate}
+
+\end{document}

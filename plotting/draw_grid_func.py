@@ -171,63 +171,6 @@ def gather_coord(coordinfo: list, output_dir: str
 
     return x, z
 
-def gather_coord(coordinfo: list, output_dir: str
-                 ) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Gathers coordinate data from multiple NetCDF files specified in coordinfo
-
-    Args:
-        coordinfo (list): List of dictionaries from locate_coord (0-based).
-        output_dir (str): Directory containing the NetCDF files.
-
-    Returns:
-        tuple: Two numpy arrays (x, z) containing the gathered coordinates.
-    """
-    # Determine the total size of the final coordinate arrays
-    # The output array size is determined by the highest index in coordinfo + 1
-    max_i = 0
-    max_k = 0
-    for info in coordinfo:
-        max_i = max(max_i, info['indxe'][0])
-        max_k = max(max_k, info['indxe'][1])
-    x = np.zeros((max_k + 1, max_i + 1))
-    z = np.zeros((max_k + 1, max_i + 1))
-
-    # Load coordinates from each relevant file
-    for info in coordinfo:
-        n_i, n_k = info['thisid']
-        i1, k1 = info['indxs']
-        i2, k2 = info['indxe']
-        subs = info['subs']
-        subc = info['subc']
-        subt = info['subt']
-        
-        fnm_coord = os.path.join(output_dir,
-                                 f"{info['fnmprefix']}_px{n_i}_pz{n_k}.nc")
-        
-        if not os.path.exists(fnm_coord):
-            raise FileNotFoundError(f"gather_coord: file {fnm_coord} does not exist")
-
-        with Dataset(fnm_coord, 'r') as nc_file:
-            start_x = subs[0]
-            start_z = subs[1]
-            # Note: end need add 1, due to python feature
-            stop_x_py = start_x + (subc[0] - 1) * subt[0] + 1
-            stop_z_py = start_z + (subc[1] - 1) * subt[1] + 1
-            step_x_py = subt[0]
-            step_z_py = subt[1]
-
-            # Apply the slice to read the data
-            x_data = nc_file['x'][start_z:stop_z_py:step_z_py,
-                                  start_x:stop_x_py:step_x_py]
-            z_data = nc_file['z'][start_z:stop_z_py:step_z_py,
-                                  start_x:stop_x_py:step_x_py]
-
-            x[k1:k2+1, i1:i2+1] = x_data
-            z[k1:k2+1, i1:i2+1] = z_data
-
-    return x, z
-
 def gather_quality(coordinfo: list, output_dir: str, varnm: str
                  ) -> np.ndarray:
     """

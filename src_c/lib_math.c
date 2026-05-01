@@ -100,3 +100,15 @@ void mat_iden2x2(mat2x2_t A)
     A[1][0] = 0.0f;
     A[1][1] = 1.0f;
 }
+
+float
+dist_point2line(float p0[2], float p1[2], float p2[2])
+{
+  float A, B, C;
+
+  A = p2[1] - p1[1];
+  B = p1[0] - p2[0];
+  C = -p1[1] * B - p1[0] * A;
+
+  return fabsf((A * p0[0] + B * p0[1] + C) / sqrtf(A * A + B * B));
+}

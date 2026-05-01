@@ -51,20 +51,12 @@ def diri_gene(gdcurv: 'GridData', cfgs: dict, mympi: 'MPIclass', lib=None):
     set_src_diri(x2d, z2d, p_x1, p_x2, p_z1, p_z2, 
                  g11_x1, g11_x2, g22_z1, g22_z2, 
                  gdcurv, src, mympi)
-    if (cfgs['execute_C_code'] == 1):
-        lib.interp_inner_source_c(src.P, src.P_x1, src.P_x2, 
-                              src.P_z1, src.P_z2, src.Q, 
-                              src.Q_x1, src.Q_x2, src.Q_z1, 
-                              src.Q_z2, nx, nz, gni1, gnk1,
-                              total_nx, total_nz, coef, 
-                              weight)
-    else:
-        interp_inner_source(src.P, src.P_x1, src.P_x2, 
-                            src.P_z1, src.P_z2, src.Q, 
-                            src.Q_x1, src.Q_x2, src.Q_z1, 
-                            src.Q_z2, nx, nz, gni1, gnk1,
-                            total_nx, total_nz, coef, 
-                            weight)
+    lib.interp_inner_source_c(src.P, src.P_x1, src.P_x2,
+                          src.P_z1, src.P_z2, src.Q,
+                          src.Q_x1, src.Q_x2, src.Q_z1,
+                          src.Q_z2, nx, nz, gni1, gnk1,
+                          total_nx, total_nz, coef,
+                          weight)
 
     # Copy coordinates
     x2d_tmp[:] = x2d[:]
@@ -82,10 +74,7 @@ def diri_gene(gdcurv: 'GridData', cfgs: dict, mympi: 'MPIclass', lib=None):
         # Boundary exchange
         grid_comm_optimized(mympi, x2d_tmp, z2d_tmp)
 
-        if (cfgs['execute_C_code'] == 1):
-            lib.compute_residual_c(x2d, z2d, x2d_tmp, z2d_tmp, local_max, nx, nz)
-        else:
-            compute_residual(x2d, z2d, x2d_tmp, z2d_tmp, local_max, nx, nz)
+        lib.compute_residual_c(x2d, z2d, x2d_tmp, z2d_tmp, local_max, nx, nz)
 
         # Global reduction of maximum errors
         comm.Allreduce(local_max, global_max, op=MPI.MAX)
@@ -110,20 +99,12 @@ def diri_gene(gdcurv: 'GridData', cfgs: dict, mympi: 'MPIclass', lib=None):
         set_src_diri(x2d, z2d, p_x1, p_x2, p_z1, p_z2, 
                     g11_x1, g11_x2, g22_z1, g22_z2, 
                     gdcurv, src, mympi)
-        if (cfgs['execute_C_code'] == 1):
-            lib.interp_inner_source_c(src.P, src.P_x1, src.P_x2, 
-                                  src.P_z1, src.P_z2, src.Q, 
-                                  src.Q_x1, src.Q_x2, src.Q_z1, 
-                                  src.Q_z2, nx, nz, gni1, gnk1,
-                                  total_nx, total_nz, coef, 
-                                  weight)
-        else:
-            interp_inner_source(src.P, src.P_x1, src.P_x2, 
-                                src.P_z1, src.P_z2, src.Q, 
-                                src.Q_x1, src.Q_x2, src.Q_z1, 
-                                src.Q_z2, nx, nz, gni1, gnk1,
-                                total_nx, total_nz, coef, 
-                                weight)
+        lib.interp_inner_source_c(src.P, src.P_x1, src.P_x2,
+                              src.P_z1, src.P_z2, src.Q,
+                              src.Q_x1, src.Q_x2, src.Q_z1,
+                              src.Q_z2, nx, nz, gni1, gnk1,
+                              total_nx, total_nz, coef,
+                              weight)
     else:
         max_resi = global_max[0]
         max_resk = global_max[1]

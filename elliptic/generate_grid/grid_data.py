@@ -2,6 +2,7 @@ import sys
 import numpy as np
 from pathlib import Path
 from mpi4py import MPI
+from common.utils import print_quality_checks
 
 
 class GridData:
@@ -312,22 +313,9 @@ def cfgs_print(cfgs: dict):
     print(f"input geometry file is \n {cfgs['geometry_input_file']}")
     print(f"export grid dir is \n {cfgs['grid_export_dir']}")
     print("-------------------------------------------------------")
-    
-    if cfgs['check_orth'] == 1:
-        print("------- check grid orthogonality-------")
-    if cfgs['check_jac'] == 1:
-        print("------- check grid jacobi-------")
-    if cfgs['check_ratio'] == 1:
-        print("------- check grid ratio-------")
-    if cfgs['check_step_xi'] == 1:
-        print("------- check grid step xi direction-------")
-    if cfgs['check_step_zt'] == 1:
-        print("------- check grid step zt direction-------")
-    if cfgs['check_smooth_xi'] == 1:
-        print("------- check grid smooth xi direction-------")
-    if cfgs['check_smooth_zt'] == 1:
-        print("------- check grid smooth zt direction-------")
-    
+
+    print_quality_checks(cfgs)
+
     cur_method = next(iter(cfgs['method']))
     print(f"method is {cur_method}")
 
