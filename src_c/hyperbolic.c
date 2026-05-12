@@ -202,21 +202,21 @@ cal_matrix(float *x2d, float *z2d, int nx, int k, float *step,
         area[i] = arc_len * step[k-1];
         area[i+nx] = area[i];
       } else {
-        area[i] = area[i+nx];
-        area[i+nx] = arc_len * step[k-1];
+        area[i+nx] = area[i];
+        area[i] = arc_len * step[k-1];
       }
       temp = pow(x_xi0,2) + pow(z_xi0,2);
-      x_zt0 = -z_xi0*area[i]/temp;
-      z_zt0 =  x_xi0*area[i]/temp;
+      x_zt0 = -z_xi0*area[i+nx]/temp;
+      z_zt0 =  x_xi0*area[i+nx]/temp;
       // add damping factor, maybe inv(B) singular
-      A[0][0] = x_zt0;      A[0][1] = z_zt0;
-      A[1][0] = z_zt0;      A[1][1] =-x_zt0; 
+      A[0][0] = x_zt0+1e-7; A[0][1] = z_zt0;
+      A[1][0] = z_zt0;      A[1][1] =-x_zt0+1e-7;
       B[0][0] = x_xi0+1e-7; B[0][1] = z_xi0;
-      B[1][0] =-z_xi0;      B[1][1] = x_xi0+1e-7; 
+      B[1][0] =-z_xi0;      B[1][1] = x_xi0+1e-7;
       mat_invert2x2(B);
       mat_mul2x2(B,A,mat);
       mat_iden2x2(mat_b);
-      vec[0] = 0; vec[1] = area[i+nx];
+      vec[0] = 0; vec[1] = area[i];
       mat_mul2x1(B,vec,vec_d);
       iptr1 = (i-1)*CONST_NDIM*CONST_NDIM;
       iptr2 = (i-1)*CONST_NDIM;

@@ -4,11 +4,11 @@
 *.svg
 *.so
 *.txt
+!docs/*.pdf
 __pycache__/
 output/
 verification/
 *.nc
 *.pyc
 *.pyd
-*.pdf
 
