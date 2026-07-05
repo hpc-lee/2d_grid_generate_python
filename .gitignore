@@ -4,11 +4,13 @@
 *.svg
 *.so
 *.txt
-!docs/*.pdf
 __pycache__/
 output/
-verification/
-*.nc
 *.pyc
 *.pyd
+*.swp
+
+# large grid test artifacts (大文件不入库)
+parabolic/golden_large/
+parabolic/output_large/
 

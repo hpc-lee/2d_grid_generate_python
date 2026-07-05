@@ -1,12 +1,19 @@
 import numpy as np
-import numba
+import sys
+from pathlib import Path
 from mpi4py import MPI
-from mympi import grid_comm_optimized
-from grid_utils import update_SOR, interp_inner_source
-from grid_utils import compute_residual, source
+from mympi import grid_ghost_exchange
+from grid_utils import source
+
+# C++ accelerated module (pybind11), located at src_cpp/gridcpp.so
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src_cpp"))
+try:
+    import gridcpp
+except ImportError:
+    gridcpp = None
 
 
-def diri_gene(gdcurv: 'GridData', cfgs: dict, mympi: 'MPIclass', lib=None):
+def diri_gene(gdcurv: 'GridData', cfgs: dict, mympi: 'MPIclass'):
     """
     Dirichlet boundary condition grid generation
     """
@@ -48,15 +55,14 @@ def diri_gene(gdcurv: 'GridData', cfgs: dict, mympi: 'MPIclass', lib=None):
     ghost_point_cal(x2d, z2d, nx, nz, p_x1, p_x2, p_z1, p_z2,
                     g11_x1, g11_x2, g22_z1, g22_z2, neighid)
 
-    set_src_diri(x2d, z2d, p_x1, p_x2, p_z1, p_z2, 
-                 g11_x1, g11_x2, g22_z1, g22_z2, 
+    set_src_diri(x2d, z2d, p_x1, p_x2, p_z1, p_z2,
+                 g11_x1, g11_x2, g22_z1, g22_z2,
                  gdcurv, src, mympi)
-    lib.interp_inner_source_c(src.P, src.P_x1, src.P_x2,
-                          src.P_z1, src.P_z2, src.Q,
-                          src.Q_x1, src.Q_x2, src.Q_z1,
-                          src.Q_z2, nx, nz, gni1, gnk1,
-                          total_nx, total_nz, coef,
-                          weight)
+    gridcpp.interp_inner_source_cpp(src.P, src.P_x1, src.P_x2,
+                              src.P_z1, src.P_z2, src.Q,
+                              src.Q_x1, src.Q_x2, src.Q_z1,
+                              src.Q_z2, nx, nz, gni1, gnk1,
+                              total_nx, total_nz, coef, weight)
 
     # Copy coordinates
     x2d_tmp[:] = x2d[:]
@@ -70,11 +76,11 @@ def diri_gene(gdcurv: 'GridData', cfgs: dict, mympi: 'MPIclass', lib=None):
 
     for n_iter in range(1, max_iter + 1):
         # Update grid using SOR
-        update_SOR(x2d, z2d, x2d_tmp, z2d_tmp, nx, nz, src.P, src.Q, omega)
+        gridcpp.update_SOR_cpp(x2d, z2d, x2d_tmp, z2d_tmp, nx, nz, src.P, src.Q, omega)
         # Boundary exchange
-        grid_comm_optimized(mympi, x2d_tmp, z2d_tmp)
+        grid_ghost_exchange(mympi, x2d_tmp, z2d_tmp)
 
-        lib.compute_residual_c(x2d, z2d, x2d_tmp, z2d_tmp, local_max, nx, nz)
+        gridcpp.compute_residual_cpp(x2d, z2d, x2d_tmp, z2d_tmp, local_max, nx, nz)
 
         # Global reduction of maximum errors
         comm.Allreduce(local_max, global_max, op=MPI.MAX)
@@ -96,15 +102,14 @@ def diri_gene(gdcurv: 'GridData', cfgs: dict, mympi: 'MPIclass', lib=None):
         z2d, z2d_tmp = z2d_tmp, z2d
         
         # Update source terms with new grid
-        set_src_diri(x2d, z2d, p_x1, p_x2, p_z1, p_z2, 
-                    g11_x1, g11_x2, g22_z1, g22_z2, 
+        set_src_diri(x2d, z2d, p_x1, p_x2, p_z1, p_z2,
+                    g11_x1, g11_x2, g22_z1, g22_z2,
                     gdcurv, src, mympi)
-        lib.interp_inner_source_c(src.P, src.P_x1, src.P_x2,
-                              src.P_z1, src.P_z2, src.Q,
-                              src.Q_x1, src.Q_x2, src.Q_z1,
-                              src.Q_z2, nx, nz, gni1, gnk1,
-                              total_nx, total_nz, coef,
-                              weight)
+        gridcpp.interp_inner_source_cpp(src.P, src.P_x1, src.P_x2,
+                                  src.P_z1, src.P_z2, src.Q,
+                                  src.Q_x1, src.Q_x2, src.Q_z1,
+                                  src.Q_z2, nx, nz, gni1, gnk1,
+                                  total_nx, total_nz, coef, weight)
     else:
         max_resi = global_max[0]
         max_resk = global_max[1]
@@ -283,7 +288,6 @@ def ghost_point_cal(x2d: np.ndarray, z2d: np.ndarray, nx: int,
         g22_z2[i_range] = proj_x**2 + proj_z**2
 
 
-@numba.jit(nopython=True, fastmath=True, cache=True, nogil=True)
 def calc_x1_diri(x2d, z2d, p_x1, g11_x1, gnk1, nx, nz, EPS, P_x1_loc, Q_x1_loc):
     k_start = 1
     k_end = nz - 1
@@ -321,7 +325,6 @@ def calc_x1_diri(x2d, z2d, p_x1, g11_x1, gnk1, nx, nz, EPS, P_x1_loc, Q_x1_loc):
     term2_Q = (grad_zt_x * grad_ztzt_x + grad_zt_z * grad_ztzt_z) / g22
     Q_x1_loc[gnk_range] = -(term1_Q + term2_Q)
 
-@numba.jit(nopython=True, fastmath=True, cache=True, nogil=True)
 def calc_x2_diri(x2d, z2d, p_x2, g11_x2, gnk1, nx, nz, EPS, P_x2_loc, Q_x2_loc):
     k_range_slice = slice(1, nz-1)
     gnk_range = gnk1 + np.arange(nz - 2)
@@ -358,7 +361,6 @@ def calc_x2_diri(x2d, z2d, p_x2, g11_x2, gnk1, nx, nz, EPS, P_x2_loc, Q_x2_loc):
     Q_x2_loc[gnk_range] = -(term1_Q + term2_Q)
 
 
-@numba.jit(nopython=True, fastmath=True, cache=True, nogil=True)
 def calc_z1_diri(x2d, z2d, p_z1, g22_z1, gni1, nx, nz, EPS, P_z1_loc, Q_z1_loc):
     i_start = 1
     i_end = nx - 1
@@ -397,7 +399,6 @@ def calc_z1_diri(x2d, z2d, p_z1, g22_z1, gni1, nx, nz, EPS, P_z1_loc, Q_z1_loc):
     Q_z1_loc[gni_range] = -(term1_Q + term2_Q)
 
 
-@numba.jit(nopython=True, fastmath=True, cache=True, nogil=True)
 def calc_z2_diri(x2d, z2d, p_z2, g22_z2, gni1, nx, nz, EPS, P_z2_loc, Q_z2_loc):
     i_range_slice = slice(1, nx-1)
     gni_range = gni1 + np.arange(nx - 2)

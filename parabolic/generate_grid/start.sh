@@ -12,7 +12,6 @@ cat << ieof > ${CONFIGS}
     "number_of_grid_points_x" : 841,
     "number_of_grid_points_z" : 601,
 
-
     "grid_check" : 1,
     "check_orth" : 1,
     "check_jac" : 1,
@@ -33,6 +32,6 @@ ieof
 
 python para.py \
     --config-file ${CONFIGS} \
-    --verbose 10  2>&1 | tee output.log
+    --verbose 10  2>&1 | tee log
 
 # vim:ts=4:sw=4:nu:et:ai:

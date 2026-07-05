@@ -1,13 +1,20 @@
 import numpy as np
+import sys
+from pathlib import Path
 from mpi4py import MPI
-import numba
-from mympi import grid_comm_optimized
-from grid_utils import update_SOR, interp_inner_source
-from grid_utils import compute_residual, source
+from mympi import grid_ghost_exchange
+from grid_utils import source
+
+# C++ accelerated module (pybind11), located at src_cpp/gridcpp.so
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src_cpp"))
+try:
+    import gridcpp
+except ImportError:
+    gridcpp = None
 
 
-def higen_gene(gdcurv: 'GridData', cfgs: dict, 
-               mympi: 'MPIclass', lib=None):
+def higen_gene(gdcurv: 'GridData', cfgs: dict,
+               mympi: 'MPIclass'):
     """
     Dirichlet boundary condition grid generation
     """
@@ -47,12 +54,12 @@ def higen_gene(gdcurv: 'GridData', cfgs: dict,
     set_src_higen(x2d, z2d, gdcurv, src, dx1, dx2,
                   dz1, dz2, mympi)
 
-    lib.interp_inner_source_c(src.P, src.P_x1, src.P_x2,
-                          src.P_z1, src.P_z2, src.Q,
-                          src.Q_x1, src.Q_x2, src.Q_z1,
-                          src.Q_z2, nx, nz, gni1, gnk1,
-                          total_nx, total_nz, coef,
-                          weight)
+    gridcpp.interp_inner_source_cpp(src.P, src.P_x1, src.P_x2,
+                              src.P_z1, src.P_z2, src.Q,
+                              src.Q_x1, src.Q_x2, src.Q_z1,
+                              src.Q_z2, nx, nz, gni1, gnk1,
+                              total_nx, total_nz, coef,
+                              weight)
 
     # Copy coordinates
     x2d_tmp[:] = x2d[:]
@@ -66,11 +73,11 @@ def higen_gene(gdcurv: 'GridData', cfgs: dict,
 
     for n_iter in range(1, max_iter + 1):
         # Update grid using SOR
-        update_SOR(x2d, z2d, x2d_tmp, z2d_tmp, nx, nz, src.P, src.Q, omega)
+        gridcpp.update_SOR_cpp(x2d, z2d, x2d_tmp, z2d_tmp, nx, nz, src.P, src.Q, omega)
         # Boundary exchange
-        grid_comm_optimized(mympi, x2d_tmp, z2d_tmp)
+        grid_ghost_exchange(mympi, x2d_tmp, z2d_tmp)
 
-        lib.compute_residual_c(x2d, z2d, x2d_tmp, z2d_tmp, local_max, nx, nz)
+        gridcpp.compute_residual_cpp(x2d, z2d, x2d_tmp, z2d_tmp, local_max, nx, nz)
 
         # Global reduction of maximum errors
         comm.Allreduce(local_max, global_max, op=MPI.MAX)
@@ -94,12 +101,12 @@ def higen_gene(gdcurv: 'GridData', cfgs: dict,
         # Update source terms with new grid
         set_src_higen(x2d, z2d, gdcurv, src, dx1, dx2,
                       dz1, dz2, mympi)
-        lib.interp_inner_source_c(src.P, src.P_x1, src.P_x2,
-                              src.P_z1, src.P_z2, src.Q,
-                              src.Q_x1, src.Q_x2, src.Q_z1,
-                              src.Q_z2, nx, nz, gni1, gnk1,
-                              total_nx, total_nz, coef,
-                              weight)
+        gridcpp.interp_inner_source_cpp(src.P, src.P_x1, src.P_x2,
+                                  src.P_z1, src.P_z2, src.Q,
+                                  src.Q_x1, src.Q_x2, src.Q_z1,
+                                  src.Q_z2, nx, nz, gni1, gnk1,
+                                  total_nx, total_nz, coef,
+                                  weight)
     else:
         max_resi = global_max[0]
         max_resk = global_max[1]
@@ -189,7 +196,6 @@ def dist_cal(x2d: np.ndarray, z2d: np.ndarray, nx: int, nz: int,
         dz2[i_range] = x_zt0 * vn_xi0 + z_zt0 * vn_zt0
 
 
-@numba.jit(nopython=True, fastmath=True, cache=True, nogil=True)
 def calc_x1_boundary(x2d, z2d, dx1, gnk1, nx, nz, a, theta0, EPS, Q_x1_loc, P_x1_loc):
     k_start = 1
     k_end = nz - 1
@@ -222,7 +228,6 @@ def calc_x1_boundary(x2d, z2d, dx1, gnk1, nx, nz, a, theta0, EPS, Q_x1_loc, P_x1
     P_x1_loc[gnk_range] += a * np.tanh(dif_dis)
 
 
-@numba.jit(nopython=True, fastmath=True, cache=True, nogil=True)
 def calc_x2_boundary(x2d, z2d, dx2, gnk1, nx, nz, a, theta0, EPS, Q_x2_loc, P_x2_loc):
     k_start = 1
     k_end = nz - 1
@@ -255,7 +260,6 @@ def calc_x2_boundary(x2d, z2d, dx2, gnk1, nx, nz, a, theta0, EPS, Q_x2_loc, P_x2
     P_x2_loc[gnk_range] -= a * np.tanh(dif_dis)
 
 
-@numba.jit(nopython=True, fastmath=True, cache=True, nogil=True)
 def calc_z1_boundary(x2d, z2d, dz1, gni1, nx, nz, a, theta0, EPS, P_z1_loc, Q_z1_loc):
     i_start = 1
     i_end = nx - 1
@@ -288,7 +292,6 @@ def calc_z1_boundary(x2d, z2d, dz1, gni1, nx, nz, a, theta0, EPS, P_z1_loc, Q_z1
     Q_z1_loc[gni_range] += a * np.tanh(dif_dis)
 
 
-@numba.jit(nopython=True, fastmath=True, cache=True, nogil=True)
 def calc_z2_boundary(x2d, z2d, dz2, gni1, nx, nz, a, theta0, EPS, P_z2_loc, Q_z2_loc):
     i_start = 1
     i_end = nx - 1

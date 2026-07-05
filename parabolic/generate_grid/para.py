@@ -10,13 +10,12 @@ from pathlib import Path
 import time
 import sys
 import json
-import ctypes
-import numpy as np
 
 project_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(project_root))
 
 from grid_data import grid_init_set, cfgs_print
+from grid_generation import para_gene_cpp
 from common.io_operetions import coord_export
 from common.grid_quality import grid_quality_check
 from common.grid_quality import cal_min_dist
@@ -51,26 +50,11 @@ def main(args_: list[str] | None = None) -> None:
     if (args.verbose > 0):
         cfgs_print(cfgs)
 
-    # Load C library
-    lib_path = str(project_root / "src_c" / "libgrid.so")
-    lib = ctypes.CDLL(lib_path)
-    lib.para_gene_c.argtypes = [
-        np.ctypeslib.ndpointer(dtype=np.float32),
-        np.ctypeslib.ndpointer(dtype=np.float32),
-        np.ctypeslib.ndpointer(dtype=np.float32),
-        ctypes.c_int,
-        ctypes.c_int,
-        ctypes.c_float,
-        ctypes.c_int
-    ]
-    lib.para_gene_c.restype = None
-
     t_start = time.time()
     # Generate grid
     gdcurv = grid_init_set(cfgs)
 
-    lib.para_gene_c(gdcurv.x2d, gdcurv.z2d, gdcurv.step,
-                    gdcurv.nx, gdcurv.nz, cfgs['coef'], cfgs['t2b'])
+    para_gene_cpp(gdcurv, cfgs)
 
     t_end = time.time()
     

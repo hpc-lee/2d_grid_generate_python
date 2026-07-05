@@ -11,7 +11,6 @@ import time
 import sys
 import json
 from mpi4py import MPI
-import numpy as np
 
 project_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(project_root))
@@ -22,7 +21,7 @@ from grid_data import read_bdry, grid_info_reset
 from grid_utils import linear_tfi
 from dirichlet import diri_gene
 from higenstock import higen_gene
-from mympi import mympi_set, grid_coord_exchange
+from mympi import mympi_set
 from common.io_operetions import coord_export
 from common.grid_quality import grid_quality_check
 from common.grid_quality import cal_min_dist
@@ -69,47 +68,6 @@ def main(args_: list[str] | None = None) -> None:
     if (args.verbose > 0 and myid == 0):
         cfgs_print(cfgs)
 
-    import ctypes
-    lib_path = str(project_root / "src_c" / "libgrid.so")
-    try:
-        lib = ctypes.CDLL(lib_path)
-    except OSError as e:
-        print(f"Rank {myid}: failed to load C library: {e}")
-        comm.Abort(1)
-
-    lib.interp_inner_source_c.argtypes = [
-        np.ctypeslib.ndpointer(dtype=np.float32),
-        np.ctypeslib.ndpointer(dtype=np.float32),
-        np.ctypeslib.ndpointer(dtype=np.float32),
-        np.ctypeslib.ndpointer(dtype=np.float32),
-        np.ctypeslib.ndpointer(dtype=np.float32),
-        np.ctypeslib.ndpointer(dtype=np.float32),
-        np.ctypeslib.ndpointer(dtype=np.float32),
-        np.ctypeslib.ndpointer(dtype=np.float32),
-        np.ctypeslib.ndpointer(dtype=np.float32),
-        np.ctypeslib.ndpointer(dtype=np.float32),
-        ctypes.c_int,
-        ctypes.c_int,
-        ctypes.c_int,
-        ctypes.c_int,
-        ctypes.c_int,
-        ctypes.c_int,
-        np.ctypeslib.ndpointer(dtype=np.float32),
-        np.ctypeslib.ndpointer(dtype=np.float32),
-    ]
-    lib.interp_inner_source_c.restype = None
-
-    lib.compute_residual_c.argtypes = [
-        np.ctypeslib.ndpointer(dtype=np.float32),
-        np.ctypeslib.ndpointer(dtype=np.float32),
-        np.ctypeslib.ndpointer(dtype=np.float32),
-        np.ctypeslib.ndpointer(dtype=np.float32),
-        np.ctypeslib.ndpointer(dtype=np.float32),
-        ctypes.c_int,
-        ctypes.c_int,
-    ]
-    lib.compute_residual_c.restype = None
-
     t_start = time.time()
     # set mpi info
     mympi = mympi_set(cfgs, myid, comm)
@@ -128,14 +86,13 @@ def main(args_: list[str] | None = None) -> None:
     bdry = init_bdry(cfgs)
 
     read_bdry(myid, bdry, cfgs['geometry_input_file'])
-    # Generate grid
-    linear_tfi(gdcurv, bdry, mympi)
-    grid_coord_exchange(gdcurv, mympi)
+    # Generate grid (TFI fills ghost cells directly, no boundary exchange needed)
+    linear_tfi(gdcurv, bdry)
 
     if (next(iter(cfgs['method'])) == "dirichlet"):
-        diri_gene(gdcurv, cfgs, mympi, lib)
+        diri_gene(gdcurv, cfgs, mympi)
     if (next(iter(cfgs['method'])) == "higenstock"):
-        higen_gene(gdcurv, cfgs, mympi, lib)
+        higen_gene(gdcurv, cfgs, mympi)
 
     t_end = time.time()
     

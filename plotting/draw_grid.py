@@ -6,13 +6,14 @@ from draw_grid_func import locate_coord, gather_coord
 
 # -------------------------- parameters input -------------------------- %
 # file and path name
-cfs_file = '../elliptic/output/config.json'
+#cfs_file = '../elliptic/output/config.json'
 #cfs_file = '../hyperbolic/output/config.json'
 #cfs_file = '../parabolic/output/config.json'
-# which grid profile to plot - NOW 0-BASED
+cfs_file = '../grid_post_process/output/config.json'
+# which grid profile to plot - NOW 1-BASED
 subs = [0, 0]  # Start from index 0 in both x and z dimensions
 subc = [-1, -1]   # '-1' to plot all points in this dimension (0-based interpretation)
-subt = [1, 1]
+subt = [4, 4]
 
 # figure control parameters
 flag_km = 1

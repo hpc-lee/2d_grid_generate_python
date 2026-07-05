@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 INPUTDIR=`pwd`/../prep_grid_bdry
-OUTPUTDIR=`pwd`/../output
+OUTPUTDIR=`pwd`/../output_up
 CONFIGS=${OUTPUTDIR}/config.json
 
 rm -rf "${OUTPUTDIR}"
@@ -23,12 +23,12 @@ cat << ieof > ${CONFIGS}
     "check_smooth_zt" : 1,
 
     "geometry_input_file" : "${INPUTDIR}/data_file_2d.txt",
-    "step_input_file" : "${INPUTDIR}/step_file_2d.txt",
+    "step_input_file" : "${INPUTDIR}/step_file_up.txt",
     "grid_export_dir" : "${OUTPUTDIR}",
 
     "flag_stretch" : 0,
     "coef" : 70,
-    "t2b" : 1
+    "t2b" : 0
 }
 ieof
 
